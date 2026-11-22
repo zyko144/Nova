@@ -68,13 +68,18 @@ class Updater(QObject):
         def finished():
             self.busy=False;status=reply.attribute(QNetworkRequest.Attribute.HttpStatusCodeAttribute)
             try:
-                if status==304:self.statusChanged.emit('Version '+VERSION+' · aucune nouvelle version depuis la dernière vérification.');return
+                if status==304:
+                    if self.available:
+                        self.statusChanged.emit('Version '+self.available['tag_name']+' disponible.')
+                        if manual:self.details()
+                    else:self.statusChanged.emit('Nova '+VERSION+' est à jour.')
+                    return
                 if status==404:self.statusChanged.emit('Aucune version publiée sur GitHub pour le moment.');return
                 if status!=200:self.statusChanged.emit('Vérification indisponible. Réessayez plus tard.');return
                 raw=bytes(reply.readAll())
                 if len(raw)>2*1024*1024:raise ValueError()
                 release=json.loads(raw);remote=version_tuple(release.get('tag_name',''))
-                self.etag=bytes(reply.rawHeader(b'ETag'))
+                self.etag=bytes(reply.rawHeader('ETag'))
                 if remote and remote>version_tuple(VERSION) and not release.get('prerelease') and not release.get('draft'):
                     self.available=release;tag=release['tag_name'];self.statusChanged.emit('Version '+tag+' disponible.')
                     if tag!=self.notified:self.notified=tag;self.notify('Nouvelle version disponible','Nova '+tag+' est prêt à télécharger.',self.details)
