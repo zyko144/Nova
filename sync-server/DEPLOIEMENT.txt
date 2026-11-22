@@ -1,0 +1,37 @@
+NOVA SYNC — SERVEUR A HEBERGER
+
+Ce serveur n'est pas déjà en ligne. Aucun domaine ni hébergement n'a été acheté.
+
+1. Sur un serveur Linux avec Docker Compose, copier ce dossier.
+2. Faire pointer un domaine (ex. sync.exemple.fr) vers l'adresse du serveur.
+3. Copier .env.example vers .env et renseigner NOVA_DOMAIN.
+4. Autoriser les ports 80 et 443 puis lancer : docker compose up -d --build
+5. Caddy obtient le certificat TLS automatiquement. Tester https://votre-domaine/health
+6. Dans Nova > Compte et synchronisation, renseigner https://votre-domaine.
+   Créer un compte et synchroniser les données.
+
+Pour un essai local uniquement : python server.py
+Puis renseigner http://127.0.0.1:8766 dans Nova. Ce mode ne relie pas plusieurs
+appareils et n'est pas destiné à être exposé sur Internet.
+
+Synchronisé : favoris, historique limité à 300 éléments, raccourcis personnels,
+liste d'onglets, nom du profil, thème et préférences prises en charge.
+Chaque synchronisation fusionne les liens par URL ; les suppressions de favoris
+et d'historique ne sont pas propagées. Les suppressions de raccourcis le sont.
+Les onglets distants peuvent être restaurés explicitement.
+Non synchronisé : cookies Google/sites, mots de passe de sites, téléchargements
+binaires, extensions ou leurs données, cache et fichiers locaux.
+
+Mots de passe Nova : PBKDF2-HMAC-SHA256, 600 000 itérations, sel aléatoire.
+Jetons de session : 7 jours, seul leur hash est stocké au serveur. Côté navigateur,
+le jeton reste en mémoire ; reconnectez-vous après fermeture du navigateur.
+Le transport distant exige HTTPS. Les données synchronisées sont lisibles par
+l'administrateur du serveur : pas de chiffrement de bout en bout dans cette version.
+Sauvegarder le volume nova-data et restreindre l'accès administrateur au serveur.
+
+Première version auto-hébergeable, non auditée. La vérification d'e-mail, la
+récupération de mot de passe, la MFA et la suppression de compte en libre-service
+restent à développer avant une ouverture au public. Pour un pilote personnel,
+utiliser un mot de passe dédié et sauvegarder les données. La limitation interne
+des tentatives est globale lorsque le serveur est placé derrière Caddy ; adapter
+la protection à l'hébergeur pour une utilisation par de nombreux utilisateurs.

@@ -1,0 +1,16 @@
+__pycache__/
+*.pyc
+*.spec
+.venv/
+venv/
+dist/
+build/
+bin/
+obj/
+bin-runtime/
+.env
+*.sqlite3*
+browser/preview.png
+browser/settings-preview.png
+browser/account-preview.png
+*.zip

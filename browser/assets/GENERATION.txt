@@ -1,0 +1,36 @@
+Nova Browser — génération d'images
+Outil : ImageGen intégré. Pas de clé API ni de CLI utilisée.
+
+nova-controls.png — planche de 16 commandes, génération puis raffinement.
+Prompt final de raffinement :
+Edit this exact 4x4 UI icon sprite atlas. Preserve all sixteen icons, positions,
+equal grid and symbols. Remove EVERY bit of the milky white background, purple
+fog and diffuse glow: outside the actual sharp icon strokes must be 100%
+transparent alpha=0, including all cell corners and between icons. No white or
+gray rectangular backgrounds, absolutely no halos. Flatten the icons to clean
+very light lavender (#cbb8ed) thin crisp outlines with a tiny violet edge only
+inside the stroke, not 3D. This is for use at 24px on an almost black browser:
+maximum clarity and no tile backgrounds. Keep row order exactly: back forward
+refresh home; star download puzzle profile; gear shield plus close; minimize
+maximize search video. Preserve perfectly centered equal 4x4 grid.
+
+Au rendu, les cellules du sprite sont échantillonnées et le masque alpha Qt
+supprime les pixels de fond translucides ; aucun fichier source n'est écrasé.
+
+nova-shortcuts.png — planche 3 colonnes / 2 lignes.
+Prompt :
+Production sprite atlas for a premium dark purple Nova Browser start page:
+exactly 3 columns and 2 rows, six equal square cells on a transparent square
+canvas, NO grid lines, NO text labels, NO tile backgrounds. Each symbol optically
+centered in its cell, identical 25% margin. Row 1: YouTube recognizable red rounded
+rectangle with white play triangle; Google authentic multicolor G with blue red
+yellow green; Twitch purple speech bubble gaming logo white inner glyph.
+Row 2: Netflix red folded N; Discord blurple game-controller face; thin lilac
+plus sign. Professional meticulously clean logo rendering, flat front-facing
+symbols with a very subtle polished violet edge light fitting Nova's dark violet
+interface, readable at 36 pixels, crisp clean transparent silhouette, avoid
+dramatic glow, avoid shadows spreading beyond each cell. Single coherent 3x2
+sprite atlas, exact six symbols.
+
+home-preview.png — capture du navigateur, utilisée dans les paramètres.
+Le logo Nova et le fond restent des éléments vectoriels natifs.
