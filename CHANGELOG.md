@@ -1,5 +1,13 @@
 # Historique
 
+## 3.7.0
+
+- Présentation intégrée dans la fenêtre principale, avec fond illustré, fondu du texte et transition de l'illustration.
+- Importation simplifiée : profil Chrome proposé directement pour les favoris et l'historique.
+- Parcours guidé Google Password Manager et détection des exports CSV récents dans Téléchargements, sans lecture avant validation.
+- Après un import réussi, la présentation continue sans confirmation de passage supplémentaire.
+- Accès « Revoir la présentation » dans le menu Nova.
+
 ## 3.6.3
 
 - Zone cliquable des onglets étendue jusqu'au bord supérieur de la fenêtre, sans changer leur silhouette arrondie.

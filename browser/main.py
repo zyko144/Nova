@@ -252,8 +252,15 @@ class Browser(QMainWindow):
         if self.previous_session.get('tabs'):
             self.updater.notify('Retrouvez vos onglets','Votre dernière session est disponible.',self.restore_session,action_text='Restaurer la session',symbol='reload')
         if not self.data.get('welcome_completed'):
-            from onboarding import Welcome
-            self.welcome=Welcome(self);self.welcome.show()
+            self.show_welcome()
+    def show_welcome(self):
+        from onboarding import Welcome
+        existing=getattr(self,'welcome',None)
+        if existing:
+            try:
+                if existing.isVisible():existing.raise_();return
+            except RuntimeError:pass
+        self.welcome=Welcome(self);self.welcome.setGeometry(0,self.titlebar.height(),self.width(),self.height()-self.titlebar.height());self.welcome.show();self.welcome.raise_()
     def restore_session(self):
         tabs=self.previous_session.get('tabs',[]);created=[]
         from import_data import safe_url
@@ -459,6 +466,9 @@ class Browser(QMainWindow):
             try:self.updater.toast.reposition(self)
             except RuntimeError:pass
         if hasattr(self,'resize_grip'): self.resize_grip.move(self.width()-18,self.height()-18)
+        if getattr(self,'welcome',None):
+            try:self.welcome.setGeometry(0,self.titlebar.height(),self.width(),self.height()-self.titlebar.height())
+            except RuntimeError:self.welcome=None
     def fullscreen(self,on):
         self.chrome.setVisible(not on)
         self.showFullScreen() if on else self.showNormal()
@@ -729,6 +739,7 @@ class Browser(QMainWindow):
         menu.addAction(icon('plus'),'Ajouter une application…').triggered.connect(self.add_shortcut)
         menu.addAction('Restaurer la dernière session').triggered.connect(self.restore_session)
         menu.addAction('Importer mes données…').triggered.connect(self.open_import)
+        menu.addAction('Revoir la présentation').triggered.connect(self.show_welcome)
         menu.addAction('Lecteur flottant').triggered.connect(self.floating_player)
         menu.addSeparator()
         for title,key in [('Favoris','bookmarks'),('Historique','history')]:

@@ -71,6 +71,15 @@ Qt/PySide6, Chromium, WebView2 et uBlock Origin Lite conservent leurs propres li
 
 ## Importation et fonctions 3.6
 
+Depuis 3.7, la présentation s'affiche dans la fenêtre principale de Nova, avec
+transitions courtes et illustration plein cadre. Le menu permet de la revoir.
+L'import propose Chrome en priorité et permet d'importer favoris et historique
+en un clic. Le parcours des mots de passe guide l'export Google puis détecte
+les CSV nommés Passwords / mots de passe, datés de moins de sept jours et situés
+dans Téléchargements. Seuls les noms et métadonnées sont examinés avant le clic
+Importer. Le fichier n'est ni importé ni supprimé automatiquement. Les profils
+et catégories restent modifiables avec Changer le navigateur ou les données.
+
 La version 3.6.2 conserve le jeton de renouvellement Google chiffré par Windows
 dans les données utilisateur, séparément du dossier de l'exécutable. Il est
 utilisé au redémarrage et pendant l'utilisation pour renouveler l'identité.

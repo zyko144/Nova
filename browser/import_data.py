@@ -1,5 +1,5 @@
 """Explicit, read-only imports from selected local profiles or export files."""
-import csv,json,os,sqlite3,tempfile
+import csv,json,os,sqlite3,time
 from pathlib import Path
 from html.parser import HTMLParser
 from urllib.parse import urlsplit
@@ -18,7 +18,21 @@ def profiles():
                 if p.is_dir() and (p.name=='Default' or p.name.startswith('Profile ')) and ((p/'Bookmarks').exists() or (p/'History').exists()):items.append((name+' · '+p.name,p))
     root=roaming/'Opera Software/Opera Stable'
     if root.is_dir():items.append(('Opera',root))
-    return items
+    return sorted(items,key=lambda item:(not item[0].startswith('Chrome'),item[1].name!='Default',item[0]))
+
+def password_exports(directory,now=None):
+    """Inspect filenames and metadata only; never read passwords during discovery."""
+    directory=Path(directory);now=time.time() if now is None else now;found=[]
+    if not directory.is_dir():return []
+    for path in directory.glob('*.csv'):
+        name=path.stem.casefold()
+        if not any(word in name for word in ('password','mots de passe','mots_de_passe','mots-de-passe')):continue
+        try:
+            stat=path.stat()
+            if path.is_symlink() or not path.is_file() or not 0<stat.st_size<=30*1024*1024 or not 0<=now-stat.st_mtime<=7*86400:continue
+            found.append((stat.st_mtime,path))
+        except OSError:continue
+    return [path for _,path in sorted(found,reverse=True)]
 
 def bookmark_tree(data):
     result=[];stack=[data]
