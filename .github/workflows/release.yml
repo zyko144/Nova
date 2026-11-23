@@ -35,7 +35,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python sync-server/test_google_login.py
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          python -m unittest discover -s browser/tests -v
+          python browser/tests/run_all.py
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Build portable browser
         run: ./browser/build.ps1

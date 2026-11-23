@@ -29,6 +29,17 @@ class AITest(unittest.TestCase):
                 import time
                 ai.cache['mai']=(time.monotonic(),['maison','mail']);values=[];ai.request('address','mai',lambda q,result:values.extend(result));self.assertEqual(values,['maison','mail']);post.assert_not_called()
         finally:browser.close();self.app.processEvents()
+    def test_shared_service_works_without_provider_key(self):
+        browser=Browser()
+        try:
+            ai=browser.ai;browser.data['preferences']['ai_suggestions']=True
+            with patch.object(ai.network,'post',return_value=MagicMock()) as post:
+                ai.request('address','mai',lambda *args:None);ai.timer.stop();ai.send()
+                request,body=post.call_args.args
+                self.assertEqual(request.url().host(),'nova-browser-ai-zyko144-zeev2.vercel.app')
+                self.assertFalse(request.hasRawHeader('Authorization'))
+                self.assertEqual(json.loads(bytes(body)),{'query':'mai'})
+        finally:browser.close();self.app.processEvents()
     def test_welcome_and_import_stay_in_browser_window(self):
         browser=Browser();browser.setAttribute(Qt.WidgetAttribute.WA_DontShowOnScreen,True);browser.show()
         try:

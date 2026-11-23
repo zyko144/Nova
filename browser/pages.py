@@ -311,10 +311,9 @@ class SettingsPage(InternalPage):
             action(c,'Ouvrir le bloqueur et ses réglages',b.open_blocker_settings)
             c.addWidget(text('Le filtrage est appliqué aux sites ouverts en mode compatible. Les publicités intégrées à certaines vidéos peuvent évoluer.'))
         elif index==6:
-            ai_frame,ai_layout=card('Suggestions IA','Complétions et corrections de recherche avec Groq.');layout.addWidget(ai_frame)
-            action(ai_layout,'Configurer la clé Groq…',b.ai.configure)
-            self.toggle(ai_layout,'Activer les suggestions IA en ligne','ai_suggestions',False)
-            ai_layout.addWidget(text('Le texte saisi dans la recherche est envoyé à Groq après une pause de frappe. Historique, favoris, formulaires et mots de passe ne sont pas envoyés. Quotas gratuits variables ; propositions locales en cas de limite ou d’erreur.'))
+            ai_frame,ai_layout=card('Suggestions de recherche','Complétions et corrections avec le service Nova.');layout.addWidget(ai_frame)
+            self.toggle(ai_layout,'Activer les suggestions IA en ligne','ai_suggestions',True)
+            ai_layout.addWidget(text('Le texte de recherche est envoyé au service Nova puis à Groq après une pause de frappe. Aucun historique, favori, formulaire ni mot de passe. Aucune clé à saisir. Propositions locales si le quota partagé est atteint.'))
             frame,c=card('Moteur de recherche');layout.addWidget(frame);combo=QComboBox();combo.addItems(['Nova Search','Google','DuckDuckGo','Bing']);combo.setCurrentText(b.data.get('preferences',{}).get('search_engine','Nova Search'));combo.currentTextChanged.connect(b.set_search_engine);c.addWidget(combo)
             c.addWidget(text('Nova Search conserve l’interface Nova. Un serveur connecté à Brave API active la recherche Web. Au plafond quotidien ou au quota Brave, Google prend automatiquement le relais. Sans serveur, seul le petit index local est utilisé.'))
             action(c,'Ouvrir Nova Search',lambda:b.new_tab(QUrl(b.search_url())))

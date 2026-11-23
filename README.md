@@ -146,3 +146,13 @@ faciliter la copie. La lecture silencieuse est refusée. Dans le moteur vidéo,
 la lecture du presse-papiers est autorisée seulement sur action utilisateur,
 sans mémoriser de permission permanente. Ctrl+V et les commandes explicites
 Coller restent disponibles.
+
+### Suggestions partagées (3.9.0)
+
+Le navigateur utilise le service HTTPS Nova hébergé sur Vercel. La clé Groq reste
+une variable sensible côté serveur : aucune clé à configurer sur les autres PC.
+Seul le texte de recherche admissible est transmis ; désactivation dans les
+paramètres de recherche. Le quota est partagé par tous les utilisateurs. Cache
+éphémère et limitation par instance ; les protections ne remplacent pas une
+limitation globale persistante pour une diffusion à grande échelle.
+Voir `ai-server/README.md` pour l'exploitation du service.

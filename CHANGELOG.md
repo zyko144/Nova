@@ -1,3 +1,9 @@
+## 3.9.0
+
+- Suggestions en ligne via le service Nova partagé : aucune clé à saisir ni secret distribué dans le navigateur.
+- Cache serveur, requêtes regroupées et protection contre les rafales ; propositions locales en cas de quota ou de panne.
+- Réglage pour désactiver les suggestions en ligne ; seul le texte de recherche admissible est transmis.
+
 # Historique
 
 ## 3.8.2
