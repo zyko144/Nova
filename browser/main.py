@@ -121,6 +121,8 @@ class Browser(QMainWindow):
         self.search=LocalSearch(self.root/'search'/'index.sqlite3')
         if not self.data.get('nova_search_migrated'):
             self.data['preferences']['search_engine']='Nova Search';self.data['nova_search_migrated']=True
+        if not self.data.get('google_search_default_v1'):
+            self.data['preferences']['search_engine']='Google';self.data['google_search_default_v1']=True
         endpoint=self.data['preferences'].get('nova_search_endpoint','');target=QUrl(endpoint)
         self.search_base=endpoint.rstrip('/')+'/' if target.scheme()=='https' and target.host() and not target.userName() and not target.password() and not target.hasQuery() and not target.hasFragment() else self.search.base
         self.data['nova_search_base']=self.search_base

@@ -6,6 +6,14 @@ from suggestions import suggestions
 
 class VaultTest(unittest.TestCase):
     @unittest.skipUnless(sys.platform=='win32','Windows DPAPI')
+    def test_google_configuration_is_encrypted_and_readable(self):
+        from types import SimpleNamespace
+        from google_flow import save_desktop_secret,desktop_secret
+        with tempfile.TemporaryDirectory() as directory:
+            browser=SimpleNamespace(root=Path(directory));save_desktop_secret(browser,'fixture-google-client-secret')
+            self.assertEqual(desktop_secret(browser),'fixture-google-client-secret')
+            self.assertNotIn(b'fixture-google-client-secret',(browser.root/'google-client.dat').read_bytes())
+    @unittest.skipUnless(sys.platform=='win32','Windows DPAPI')
     def test_encrypted_storage_and_origin_isolation(self):
         with tempfile.TemporaryDirectory() as directory:
             path=Path(directory)/'vault.dat';vault=Vault(path)

@@ -1,5 +1,11 @@
 # Historique
 
+## 3.4.3
+
+- Recherche Google par défaut, sans Brave ni serveur requis, avec l'accueil Nova conservé.
+- Le raccourci Nova Search ouvre le moteur sélectionné au lieu du catalogue local.
+- Saisie masquée du réglage Google directement dans Nova lorsqu'il manque, avec stockage Windows DPAPI.
+
 ## 3.4.2
 
 - Configuration locale du client Google via un outil de saisie masquée et Windows DPAPI.

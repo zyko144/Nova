@@ -13,6 +13,11 @@ def desktop_secret(browser):
     try:return protect((browser.root/'google-client.dat').read_bytes(),True).decode().strip()
     except (OSError,UnicodeError,ValueError):return ''
 
+def save_desktop_secret(browser,value):
+    value=value.strip()
+    if not 10<=len(value)<=4096:raise ValueError('Secret du client invalide')
+    path=browser.root/'google-client.dat';temporary=path.with_suffix('.tmp');temporary.write_bytes(protect(value.encode()));temporary.replace(path)
+
 def verify_identity(token,nonce):
     from google.oauth2 import id_token
     from google.auth.transport.requests import Request
@@ -33,7 +38,12 @@ class GoogleFlow(QObject):
     def start(self,endpoint):
         if self.in_progress:self.client.statusChanged.emit('Une connexion Google est déjà en cours.');return
         if not desktop_secret(self.client.browser):
-            self.client.statusChanged.emit('Google nécessite une configuration sur ce PC. Lancez Configurer-Google.cmd dans le dossier Nova, puis réessayez.');return
+            from ui import NovaInput
+            from PySide6.QtWidgets import QLineEdit
+            value,ok=NovaInput.getText(self.client.browser,'Configurer Google sur ce PC','Collez le secret du client OAuth de bureau Nova. Ce n’est pas le mot de passe de votre compte Google. Le réglage sera chiffré par Windows.',echo=QLineEdit.EchoMode.Password)
+            if not ok:return
+            try:save_desktop_secret(self.client.browser,value)
+            except (OSError,ValueError):self.client.statusChanged.emit('Le réglage Google n’a pas pu être enregistré.');return
         self.in_progress=True
         self.generation+=1
         generation=self.generation

@@ -46,7 +46,7 @@ class NovaDialog(QDialog):
 class NovaInput:
     @staticmethod
     def getText(parent,title,label,*args,**kwargs):
-        dialog=NovaDialog(parent,title,label);edit=QLineEdit();edit.setText(kwargs.get('text',''));dialog.body.addWidget(edit);dialog.buttons()
+        dialog=NovaDialog(parent,title,label);edit=QLineEdit();edit.setText(kwargs.get('text',''));edit.setEchoMode(kwargs.get('echo',QLineEdit.EchoMode.Normal));dialog.body.addWidget(edit);dialog.buttons()
         edit.returnPressed.connect(dialog.accept);edit.setFocus()
         ok=dialog.exec()==QDialog.DialogCode.Accepted
         return edit.text(),ok

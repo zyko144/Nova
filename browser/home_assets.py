@@ -31,7 +31,7 @@ def build_home(template,shortcuts,data):
         items.append({'title':entry['title'],'url':entry['url'],'index':None,'fallback':''})
     items=items[:8]+[{'title':'Ajouter','url':'https://nova.local/add','index':5,'fallback':shortcuts[-1][2]}]
     for item in items:
-        if item['title']=='Google':item.update(title='Nova Search',url=data.get('nova_search_base','https://nova.local/'),index=None)
+        if item['title']=='Google':item.update(title='Nova Search',url=data.get('nova_search_base','https://nova.local/') if data.get('preferences',{}).get('search_engine','Google')=='Nova Search' else 'https://www.google.com/',index=None)
     tiles=[]
     for item in items:
         if item['title']=='Nova Search':

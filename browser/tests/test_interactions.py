@@ -11,16 +11,16 @@ class InteractionTest(unittest.TestCase):
     def setUpClass(cls):
         cls.app=QApplication.instance() or QApplication([]);cls.app.setApplicationName('NovaInteractionTest-'+uuid.uuid4().hex)
     def test_home_search_submission_stays_in_nova(self):
-        window=Browser();window.setAttribute(Qt.WidgetAttribute.WA_DontShowOnScreen,True);window.show();view=window.current();loaded=QSignalSpy(view.loadFinished)
+        window=Browser();self.assertEqual(window.resolve('python').host(),'www.google.com');window.setAttribute(Qt.WidgetAttribute.WA_DontShowOnScreen,True);window.show();view=window.current();loaded=QSignalSpy(view.loadFinished)
         def wait_for(count):
             deadline=time.monotonic()+8
             while loaded.count()<count and time.monotonic()<deadline:self.app.processEvents();time.sleep(.01)
             return loaded.count()>=count
         try:
-            self.assertTrue(wait_for(1))
+            self.assertTrue(wait_for(1));window.set_search_engine('Nova Search');self.assertTrue(wait_for(2))
             view.page().runJavaScript("document.querySelector('input[name=q]').value='python';document.querySelector('form').requestSubmit()")
-            self.assertTrue(wait_for(2));self.assertTrue(view.url().toString().startswith(window.search.base));self.assertTrue(window.address.text().startswith('nova://search?q=python'))
-        finally:window.close();self.app.processEvents()
+            self.assertTrue(wait_for(3));self.assertTrue(view.url().toString().startswith(window.search.base));self.assertTrue(window.address.text().startswith('nova://search?q=python'))
+        finally:window.set_search_engine('Google');window.close();self.app.processEvents()
     def test_toolbar_tabs_address_and_compact_settings(self):
         window=Browser();window.setAttribute(Qt.WidgetAttribute.WA_DontShowOnScreen,True);window.show()
         original=window.current();other=window.new_tab();window.tabs.setCurrentWidget(original)
@@ -35,7 +35,7 @@ class InteractionTest(unittest.TestCase):
         self.assertIs(window.current(),original);self.assertEqual(window.tabs.count(),count)
         window.go_forward();self.assertIsInstance(window.current(),MediaView)
         window.restore_previous(window.current());self.assertIs(window.current(),original)
-        self.assertIn('127.0.0.1',window.resolve('python').toString())
+        self.assertEqual(window.resolve('python').host(),'www.google.com')
         account=window.open_account();self.assertFalse(hasattr(account,'password'))
         window.sync_client.set_google_identity({'email':'fixture@example.test','name':'Compte test','sub':'fixture'},'fixture-token','fixture-nonce')
         self.assertEqual(account.identity.text(),'Compte test');self.assertEqual(account.email.text(),'fixture@example.test')
