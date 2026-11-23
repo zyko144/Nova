@@ -6,7 +6,7 @@ def suggestions(query,data):
     query=query.strip()
     if len(query)<2 or len(query)>300:return []
     match=query.casefold();items=[];seen=set()
-    engine=data.get('preferences',{}).get('search_engine','Google');search_prefix={'Google':'https://www.google.com/search?q=','DuckDuckGo':'https://duckduckgo.com/?q=','Bing':'https://www.bing.com/search?q='}.get(engine,'https://www.google.com/search?q=')
+    engine=data.get('preferences',{}).get('search_engine','Nova Search');search_prefix={'Nova Search':data.get('nova_search_base','https://nova.local/')+'search?q=','Google':'https://www.google.com/search?q=','DuckDuckGo':'https://duckduckgo.com/?q=','Bing':'https://www.bing.com/search?q='}.get(engine,data.get('nova_search_base','https://nova.local/')+'search?q=')
     for entry in data.get('bookmarks',[])+data.get('history',[])[:300]:
         url=entry.get('url','');title=entry.get('title','')
         if url.startswith(('https://','http://')) and url not in seen and (match in url.casefold() or match in title.casefold()):

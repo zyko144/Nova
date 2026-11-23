@@ -2,6 +2,11 @@
 
 Navigateur Windows expérimental avec une interface sombre et compacte, des profils locaux, des onglets et un lecteur compatible YouTube/Twitch.
 
+Nova Search est le moteur par défaut depuis la version 3.4. L'accueil existant
+reste inchangé dans son style. Un serveur configurable utilise Brave API pour
+la recherche Web ; la clé reste côté serveur. Sans serveur, un petit index
+local est disponible. Configuration et limites dans [search-server](search-server/README.md).
+
 - Interface native Python/PySide6 et Qt WebEngine.
 - Moteur vidéo Edge WebView2 intégré, avec uBlock Origin Lite.
 - Paramètres natifs, raccourcis personnalisables et thèmes violet / noir profond.

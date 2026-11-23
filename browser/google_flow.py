@@ -1,4 +1,4 @@
-import base64,hashlib,hmac,json,secrets,threading
+import base64,hashlib,hmac,json,secrets,threading,os
 from http.server import BaseHTTPRequestHandler,HTTPServer
 from urllib.parse import urlsplit,parse_qs,urlencode
 from PySide6.QtCore import QObject,Signal,QTimer,QUrl,QByteArray
@@ -44,7 +44,7 @@ class GoogleFlow(QObject):
             def do_GET(self):
                 parsed=urlsplit(self.path);query=parse_qs(parsed.query)
                 if parsed.path!='/' or not hmac.compare_digest(query.get('state',[''])[0],expected_state):self.send_error(400);return
-                content='Connexion reçue. Revenez dans Nova.'.encode()
+                content='Autorisation reçue. Nova vérifie encore votre identité. Revenez dans Nova pour voir le résultat de la connexion.'.encode()
                 self.send_response(200);self.send_header('Content-Type','text/plain; charset=utf-8');self.send_header('Cache-Control','no-store');self.send_header('Content-Length',str(len(content)));self.end_headers();self.wfile.write(content)
                 flow.completed.emit(generation,query.get('code',[''])[0],query.get('error',[''])[0])
         self.server=HTTPServer(('127.0.0.1',0),Callback);server=self.server
@@ -56,16 +56,22 @@ class GoogleFlow(QObject):
     def finish(self,generation,code,error):
         if generation!=self.generation or not self.in_progress:return
         self.cancel(keep_active=True)
+        self.client.statusChanged.emit('Autorisation reçue. Vérification du compte Google…')
         if error or not code:self.error('Connexion Google annulée ou refusée.');return
         request=QNetworkRequest(QUrl('https://oauth2.googleapis.com/token'));request.setHeader(QNetworkRequest.KnownHeaders.ContentTypeHeader,'application/x-www-form-urlencoded');request.setTransferTimeout(20000)
-        data=urlencode({'client_id':GOOGLE_DESKTOP_CLIENT_ID,'redirect_uri':self.return_uri,'code':code,'code_verifier':self.verifier,'grant_type':'authorization_code'}).encode()
+        request.setAttribute(QNetworkRequest.Attribute.RedirectPolicyAttribute,QNetworkRequest.RedirectPolicy.ManualRedirectPolicy)
+        fields={'client_id':GOOGLE_DESKTOP_CLIENT_ID,'redirect_uri':self.return_uri,'code':code,'code_verifier':self.verifier,'grant_type':'authorization_code'}
+        if os.environ.get('NOVA_GOOGLE_CLIENT_SECRET'):fields['client_secret']=os.environ['NOVA_GOOGLE_CLIENT_SECRET']
+        data=urlencode(fields).encode()
         reply=self.client.network.post(request,QByteArray(data))
         nonce=self.nonce
         def done():
             try:
                 if generation!=self.generation or not self.in_progress:return
                 value=json.loads(bytes(reply.readAll()).decode());token=value.get('id_token')
-                if not token:raise ValueError()
+                if not token:
+                    reason=str(value.get('error','échange refusé'))[:80]
+                    self.error('Connexion Google non terminée : '+reason+'. Vérifiez la configuration OAuth du client de bureau.');return
                 def validate():
                     try:self.verified.emit(generation,verify_identity(token,nonce),token)
                     except Exception:self.failed.emit(generation,'Vérification Google impossible. Réessayez sans fermer Nova.')
@@ -76,15 +82,16 @@ class GoogleFlow(QObject):
     def accept(self,generation,claims,token):
         if generation!=self.generation or not self.in_progress:return
         self.in_progress=False
+        self.client.set_google_identity(claims,token,self.nonce)
         if self.client.endpoint:
             self.client.request('/v1/oauth/google/desktop/finish',{'login_id':self.login_id,'id_token':token},self.client.accept_session)
         else:
-            self.client.token='';self.client.auth_endpoint='';self.client.timer.stop();self.client.email=claims['email'];self.client.signedIn.emit(claims['email'])
+            self.client.token='';self.client.auth_endpoint='';self.client.timer.stop()
             browser=self.client.browser
             if browser.vault is not None:
                 try:browser.vault.remember_email(claims['email'])
                 except OSError:pass
-            self.client.statusChanged.emit('Google connecté sur cet appareil. Ajoutez un serveur Nova pour activer la synchronisation.')
+            self.client.statusChanged.emit('Connecté avec Google : '+claims.get('name',claims['email'])+'.')
     def error(self,message):self.client.statusChanged.emit(message);self.cancel()
     def validation_error(self,generation,message):
         if generation==self.generation:self.error(message)

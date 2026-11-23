@@ -30,9 +30,14 @@ def build_home(template,shortcuts,data):
         items=[x for x in items if canonical_url(x['url'])!=canonical_url(entry['url'])]
         items.append({'title':entry['title'],'url':entry['url'],'index':None,'fallback':''})
     items=items[:8]+[{'title':'Ajouter','url':'https://nova.local/add','index':5,'fallback':shortcuts[-1][2]}]
+    for item in items:
+        if item['title']=='Google':item.update(title='Nova Search',url=data.get('nova_search_base','https://nova.local/'),index=None)
     tiles=[]
     for item in items:
-        if brands and item['index'] is not None:
+        if item['title']=='Nova Search':
+            from design import LOGO
+            inner=LOGO
+        elif brands and item['index'] is not None:
             i=item['index'];inner=f'<span class="brandSprite" style="background-position:{-(i%3)*44}px {-(i//3)*44}px"></span>'
         else:inner=f'<span class="customInitial">{escape(item["title"][:1].upper())}</span>'
         tiles.append(f'<a href="{escape(item["url"],quote=True)}"><div class="tile">{inner}</div>{escape(item["title"])}</a>')
@@ -48,10 +53,15 @@ def build_home(template,shortcuts,data):
     if prefs.get('theme')=='black':css+='body{background:#020203}.backdrop{opacity:.2}.tile,form,.privacy{background:#09080ddf}'
     accent=prefs.get('accent','#9338ff')
     if re.fullmatch(r'#[0-9a-fA-F]{6}',accent):css+=f'form{{border-color:{accent}66}}.tile:hover{{border-color:{accent}}}'
-    engine=prefs.get('search_engine','Google')
+    engine=prefs.get('search_engine','Nova Search')
+    if engine=='Nova Search':result=result.replace('https://www.google.com/search',escape(data.get('nova_search_base','https://nova.local/')+'search',quote=True))
     if engine=='DuckDuckGo':result=result.replace('https://www.google.com/search','https://duckduckgo.com/')
     elif engine=='Bing':result=result.replace('https://www.google.com/search','https://www.bing.com/search')
+    allowed={'Nova Search':data.get('nova_search_base','https://nova.local/'),'DuckDuckGo':'https://duckduckgo.com/','Bing':'https://www.bing.com/','Google':'https://www.google.com/'}[engine if engine in ('Nova Search','DuckDuckGo','Bing','Google') else 'Nova Search']
+    origin=urlsplit(allowed);result=result.replace('form-action https://www.google.com;','form-action '+escape(origin.scheme+'://'+origin.netloc,quote=True)+';')
     options=''.join('<option value="'+escape(value,quote=True)+'">' for value in data.get('recent_searches',[])[:12])
     result=result.replace('<input name="q"','<input list="nova-queries" autocomplete="on" name="q"').replace('</form>','</form><datalist id="nova-queries">'+options+'</datalist>')
     css+=':root{color-scheme:dark}'
+    result=re.sub(r'<a class="privacy".*?</a>','',result,flags=re.S)
+    css+='.settings{left:auto;right:22px;bottom:22px;width:44px;height:44px;display:grid;place-items:center;padding:0;border-radius:13px}.settings:after{display:block;margin:0}.settings svg{display:none}'
     return result.replace('</style>',css+'</style>')

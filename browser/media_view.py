@@ -27,6 +27,7 @@ class MediaView(QWidget):
     shortcutRequested = Signal(str)
     credentialCaptured = Signal(object)
     fillRequested = Signal(str)
+    historyChanged = Signal()
     def __init__(self,url,profile,parent=None):
         super().__init__(parent)
         self._url=QUrl(url); self._title='Vidéo'; self.buffer=b''; self.ready=False
@@ -34,6 +35,7 @@ class MediaView(QWidget):
         self.pending_commands=[]
         self.stopping=False
         self.previous_view=None
+        self.can_back=False;self.can_forward=False
         self.adblock_enabled=False
         self.adblock_name='En cours de chargement'
         self.setAttribute(Qt.WidgetAttribute.WA_NativeWindow)
@@ -73,6 +75,7 @@ class MediaView(QWidget):
                     pixmap=QPixmap();pixmap.loadFromData(base64.b64decode(value));self.iconChanged.emit(QIcon(pixmap))
                 except (ValueError,TypeError):pass
             elif kind=='loaded': self.loadFinished.emit(event.get('ok',False))
+            elif kind=='history':self.can_back=bool(event.get('back'));self.can_forward=bool(event.get('forward'));self.historyChanged.emit()
             elif kind=='ready':
                 self.ready=True; self.label.hide()
                 if self.pending_url: self.send('navigate',self.pending_url); self.pending_url=None

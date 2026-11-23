@@ -77,6 +77,10 @@ sealed class MediaWindow : Form
         }
         base.WndProc(ref message);
     }
+    async Task SuspendMedia()
+    {
+        try {await web.CoreWebView2.ExecuteScriptAsync("document.querySelectorAll('video,audio').forEach(e=>e.pause())");await web.CoreWebView2.TrySuspendAsync();} catch { }
+    }
     void Send(object value) { try { output.WriteLine(JsonSerializer.Serialize(value)); } catch { } }
     static bool SafeUrl(string url) => Uri.TryCreate(url, UriKind.Absolute, out var uri) && (uri.Scheme == "https" || uri.Scheme == "http");
     async Task Initialize()
@@ -137,6 +141,7 @@ sealed class MediaWindow : Form
             };
             web.CoreWebView2.NavigationStarting += (_, e) => { if (!SafeUrl(e.Uri) && e.Uri != "about:blank" && !(blockerId.Length>0 && e.Uri.StartsWith("chrome-extension://"+blockerId+"/"))) e.Cancel = true; };
             web.CoreWebView2.SourceChanged += (_, _) => Send(new { type = "url", value = web.Source.ToString() });
+            web.CoreWebView2.HistoryChanged += (_, _) => Send(new { type="history",back=web.CanGoBack,forward=web.CanGoForward });
             web.CoreWebView2.DocumentTitleChanged += (_, _) => Send(new { type = "title", value = web.CoreWebView2.DocumentTitle });
             web.CoreWebView2.FaviconChanged += async (_, _) => {
                 try {
@@ -205,6 +210,8 @@ sealed class MediaWindow : Form
                     else if (cmd == "forward" && web.CanGoForward) web.GoForward();
                     else if (cmd == "reload") web.Reload();
                     else if (cmd == "focus") web.Focus();
+                    else if (cmd == "suspend") _=SuspendMedia();
+                    else if (cmd == "resume") {web.CoreWebView2.Resume();web.Focus();}
                     else if (cmd == "autofill") _=FillForm(value);
                     else if (cmd == "adblock-settings" && blockerId.Length>0) web.CoreWebView2.Navigate("chrome-extension://"+blockerId+"/dashboard.html");
                     else if (cmd == "adblock-toggle" && blocker!=null) _=ToggleBlocker(value=="on");

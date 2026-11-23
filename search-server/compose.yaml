@@ -1,0 +1,19 @@
+services:
+  search:
+    build:
+      context: ..
+      dockerfile: search-server/Dockerfile
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8787:8787"
+    volumes:
+      - nova-index:/data
+    environment:
+      BRAVE_API_KEY: ${BRAVE_API_KEY:-}
+      BRAVE_DAILY_LIMIT: ${BRAVE_DAILY_LIMIT:-200}
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 512m
+volumes:
+  nova-index:

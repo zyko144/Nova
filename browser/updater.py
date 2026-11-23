@@ -4,7 +4,7 @@ from urllib.parse import urlsplit
 from PySide6.QtCore import Qt,QTimer,QUrl,Signal,QObject
 from PySide6.QtNetwork import QNetworkAccessManager,QNetworkRequest,QNetworkReply
 from PySide6.QtWidgets import QFrame,QVBoxLayout,QHBoxLayout,QLabel,QPushButton,QApplication,QPlainTextEdit
-from ui import NovaDialog
+from ui import NovaDialog,generated_icon
 from version import VERSION,REPOSITORY,RELEASE_ASSET
 
 def version_tuple(value):
@@ -25,13 +25,15 @@ class UpdateToast(QFrame):
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating);self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
         self.setStyleSheet('QFrame{background:#110c19;border:1px solid #4a2a66;border-radius:15px}QLabel{color:#c8b9d8;border:0;background:transparent;font-size:12px}QPushButton{background:#28133d;color:#eee2fa;border:0;border-radius:8px;padding:7px 12px;font-size:12px}')
         self.setFixedWidth(345);layout=QVBoxLayout(self);layout.setContentsMargins(18,16,18,16);layout.setSpacing(10)
-        row=QHBoxLayout();heading=QLabel(title);heading.setStyleSheet('font-weight:600;color:#f2eafa;font-size:14px');row.addWidget(heading);row.addStretch()
+        row=QHBoxLayout();symbol=QLabel();symbol.setPixmap(generated_icon('download',24).pixmap(24,24));symbol.setFixedSize(28,28);row.addWidget(symbol);heading=QLabel(title);heading.setStyleSheet('font-weight:600;color:#f2eafa;font-size:14px');row.addWidget(heading);row.addStretch()
         close=QPushButton('×');close.setFixedSize(24,24);close.clicked.connect(self.close);row.addWidget(close);layout.addLayout(row)
         label=QLabel(message);label.setTextFormat(Qt.TextFormat.PlainText);label.setWordWrap(True);layout.addWidget(label)
         if callback:
             button=QPushButton('Voir la mise à jour');button.clicked.connect(lambda:(self.close(),callback()));layout.addWidget(button,0,Qt.AlignmentFlag.AlignLeft)
         else:QTimer.singleShot(8000,self.close)
-        self.adjustSize();point=browser.mapToGlobal(browser.rect().topRight());self.move(point.x()-self.width()-22,point.y()+125);self.show()
+        self.adjustSize();self.reposition(browser);self.show()
+    def reposition(self,browser):
+        point=browser.mapToGlobal(browser.rect().bottomRight());self.move(point.x()-self.width()-20,point.y()-self.height()-20)
 
 class Updater(QObject):
     statusChanged=Signal(str)

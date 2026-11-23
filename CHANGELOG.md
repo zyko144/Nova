@@ -1,5 +1,16 @@
 # Historique
 
+## 3.4.0
+
+- Nova Search intégré à l'accueil existant : recherche Web via serveur Brave API configurable, index local de secours.
+- Clé Brave côté serveur, plafond quotidien d'appels et aucun compteur de résultats inventé.
+- NovaBot et serveur autonome pour étendre l'index sans API de recherche tierce.
+- Compte simplifié : Google uniquement, nom et photo de profil, restauration d'une session encore valide.
+- État OAuth explicite après le retour Google ; aucun succès affiché avant vérification de l'identité.
+- Retour et avance conservés entre le moteur classique et le moteur vidéo ; lecteur masqué mis en veille.
+- Notification de mise à jour avec icône en bas à droite.
+- VPN retiré de l'interface, paramètres directs et menu à trois traits séparé.
+
 ## 3.3.0
 
 - Correction du focus clavier YouTube et des champs WebView2.

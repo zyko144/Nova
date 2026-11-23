@@ -5,6 +5,7 @@ def render_home(data):
     return build_home(HOME,SHORTCUTS,data)
 
 ICONS = {
+ 'menu':'<path d="M4 6h16M4 12h16M4 18h16"/>',
  'back':'<path d="m14 5-7 7 7 7M7 12h14"/>',
  'forward':'<path d="m10 5 7 7-7 7M17 12H3"/>',
  'reload':'<path d="M20 8a8 8 0 1 0 .3 8M20 3v6h-6"/>',

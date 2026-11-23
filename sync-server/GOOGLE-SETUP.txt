@@ -28,3 +28,13 @@ une connexion réelle avec le consentement Google Cloud.
 L'ancien trajet Web reste optionnel côté serveur via GOOGLE_CLIENT_ID,
 GOOGLE_CLIENT_SECRET et NOVA_PUBLIC_ORIGIN ; son secret reste sur le serveur.
 Documentation : https://developers.google.com/identity/protocols/oauth2/native-app
+
+NOVA 3.4 : la page Compte utilise Google uniquement, sans formulaire Nova Sync.
+Une autorisation reçue dans le navigateur ne vaut pas encore connexion :
+Nova affiche le résultat après échange et vérification du jeton.
+Nom et photo viennent des informations vérifiées du profil Google.
+La session locale est chiffrée DPAPI et restaurée seulement si le jeton
+est encore valide. À expiration, se reconnecter à Google.
+Si Google répond invalid_client et exige un secret de bureau, fournir
+uniquement sur la machine une valeur renouvelée via NOVA_GOOGLE_CLIENT_SECRET.
+Ne jamais inclure un secret dans GitHub ou dans le paquet distribué.

@@ -1,7 +1,7 @@
 import json
 from datetime import datetime
-from PySide6.QtCore import Qt,QUrl,QByteArray,Signal,QTimer,QSize,QRectF
-from PySide6.QtGui import QPainter,QColor,QFont,QPixmap
+from PySide6.QtCore import Qt,QUrl,QByteArray,Signal,QTimer,QSize,QRectF,QBuffer,QIODevice
+from PySide6.QtGui import QPainter,QColor,QFont,QPixmap,QImageReader,QPainterPath
 from PySide6.QtNetwork import QNetworkAccessManager,QNetworkRequest
 from PySide6.QtWidgets import (QWidget,QFrame,QLabel,QPushButton,QLineEdit,QVBoxLayout,QHBoxLayout,
     QGridLayout,QListWidget,QListWidgetItem,QStackedWidget,QScrollArea,QCheckBox,QComboBox)
@@ -59,10 +59,55 @@ class SyncClient(QWidget):
     statusChanged=Signal(str)
     signedIn=Signal(str)
     changed=Signal()
+    avatarChanged=Signal()
+    restored=Signal(object,str,str)
     def __init__(self,browser):
         super().__init__(browser);self.browser=browser;self.network=QNetworkAccessManager(self);self.token='';self.email='';self.endpoint='';self.auth_endpoint='';self.revision=0;self.busy=False;self.remote_tabs=[]
         self.timer=QTimer(self);self.timer.setInterval(120000);self.timer.timeout.connect(self.synchronize)
         self.google=GoogleFlow(self)
+        self.google_profile={};self.avatar=QPixmap();self.identity_generation=0
+        self.restored.connect(self.restore_identity)
+        QTimer.singleShot(0,self.load_google_identity)
+    def set_google_identity(self,claims,token,nonce):
+        from vault import protect
+        self.identity_generation+=1;self.google_profile={k:str(claims.get(k,''))[:500] for k in ('name','email','picture','sub')};self.email=claims['email'];self.avatar=QPixmap()
+        try:
+            path=self.browser.root/'google-account.dat';temporary=path.with_suffix('.tmp');temporary.write_bytes(protect(json.dumps({'id_token':token,'nonce':nonce}).encode()));temporary.replace(path)
+        except OSError:pass
+        self.signedIn.emit(self.email);self.avatarChanged.emit();self.load_avatar()
+    def load_google_identity(self):
+        import threading
+        from vault import protect
+        from google_flow import verify_identity
+        try:data=json.loads(protect((self.browser.root/'google-account.dat').read_bytes(),True).decode())
+        except (OSError,ValueError):return
+        generation=self.identity_generation
+        def verify():
+            try:
+                claims=verify_identity(data['id_token'],data['nonce']);claims['_restore_generation']=generation;self.restored.emit(claims,data['id_token'],data['nonce'])
+            except Exception:pass
+        threading.Thread(target=verify,daemon=True).start()
+    def restore_identity(self,claims,token,nonce):
+        if claims.pop('_restore_generation',-1)!=self.identity_generation:return
+        self.set_google_identity(claims,token,nonce);self.statusChanged.emit('Compte Google connecté.')
+    def load_avatar(self):
+        generation=self.identity_generation;url=QUrl(self.google_profile.get('picture',''));host=url.host().lower()
+        if url.scheme()!='https' or not (host=='googleusercontent.com' or host.endswith('.googleusercontent.com')):return
+        request=QNetworkRequest(url);request.setTransferTimeout(10000);request.setAttribute(QNetworkRequest.Attribute.RedirectPolicyAttribute,QNetworkRequest.RedirectPolicy.ManualRedirectPolicy)
+        reply=self.network.get(request);data=bytearray()
+        def read():
+            data.extend(bytes(reply.readAll()))
+            if len(data)>1024*1024:reply.abort()
+        def done():
+            read()
+            if generation==self.identity_generation and len(data)<=1024*1024:
+                buffer=QBuffer();buffer.setData(QByteArray(bytes(data)));buffer.open(QIODevice.OpenModeFlag.ReadOnly);reader=QImageReader(buffer);size=reader.size()
+                if size.isValid() and max(size.width(),size.height())<=2048:
+                    reader.setScaledSize(QSize(96,96));picture=reader.read()
+                    if not picture.isNull():
+                        self.avatar=QPixmap(96,96);self.avatar.fill(Qt.GlobalColor.transparent);painter=QPainter(self.avatar);painter.setRenderHint(QPainter.RenderHint.Antialiasing);clip=QPainterPath();clip.addEllipse(0,0,96,96);painter.setClipPath(clip);painter.drawImage(0,0,picture);painter.end();self.avatarChanged.emit()
+            reply.deleteLater()
+        reply.readyRead.connect(read);reply.finished.connect(done)
     def request(self,path,payload,callback,failed=None):
         if self.busy:
             self.statusChanged.emit('Une opération est déjà en cours.')
@@ -130,7 +175,10 @@ class SyncClient(QWidget):
         self.request('/v1/snapshot',None,pulled)
     def logout(self):
         if self.token and self.endpoint==self.auth_endpoint:self.request('/v1/logout',{},lambda data:None)
-        self.google.cancel();self.token='';self.email='';self.auth_endpoint='';self.timer.stop();self.signedIn.emit('');self.statusChanged.emit('Déconnecté. Les données locales restent disponibles.')
+        self.identity_generation+=1;self.google_profile={};self.avatar=QPixmap()
+        try:(self.browser.root/'google-account.dat').unlink(missing_ok=True)
+        except OSError:pass
+        self.google.cancel();self.token='';self.email='';self.auth_endpoint='';self.timer.stop();self.signedIn.emit('');self.avatarChanged.emit();self.statusChanged.emit('Déconnecté. Les données locales restent disponibles.')
     def restore_tabs(self):
         for entry in self.remote_tabs[:30]:
             url=QUrl(entry.get('url',''))
@@ -139,35 +187,27 @@ class SyncClient(QWidget):
 
 class AccountPage(InternalPage):
     def __init__(self,browser):
-        super().__init__('account','Compte Nova',browser)
-        outer=QVBoxLayout(self);outer.setContentsMargins(45,30,45,30);outer.setSpacing(18)
-        outer.addWidget(text('Votre compte Nova','pageTitle'));outer.addWidget(text('Votre navigateur, vos données, sur vos appareils.'))
-        row=QHBoxLayout();row.setSpacing(25)
-        frame,form=card('Connexion et inscription','Connectez Nova à votre serveur de synchronisation auto-hébergé.');row.addWidget(frame,1)
-        self.endpoint=QLineEdit(browser.data.get('sync_endpoint',''));self.endpoint.setPlaceholderText('https://sync.votre-domaine.fr')
-        self.email=QLineEdit();self.email.setPlaceholderText('vous@exemple.fr')
-        self.password=QLineEdit();self.password.setEchoMode(QLineEdit.EchoMode.Password);self.password.setPlaceholderText('12 caractères minimum')
-        self.confirm=QLineEdit();self.confirm.setEchoMode(QLineEdit.EchoMode.Password);self.confirm.setPlaceholderText('Confirmer le mot de passe pour créer un compte')
-        for title,widget in [('Serveur Nova Sync',self.endpoint),('Adresse e-mail',self.email),('Mot de passe',self.password),('Confirmation pour une inscription',self.confirm)]:form.addWidget(text(title));form.addWidget(widget)
-        buttons=QHBoxLayout();action(buttons,'Se connecter',lambda:self.authenticate(False),True);action(buttons,'Créer un compte',lambda:self.authenticate(True));form.addLayout(buttons)
-        action(form,'Continuer avec Google',lambda:browser.sync_client.google.start(self.endpoint.text()))
-        form.addWidget(text('Google s’ouvre dans le navigateur système. Sans serveur, la connexion reste locale ; avec un serveur Nova, elle peut activer la synchronisation. Aucun mot de passe Google n’est demandé par Nova.'))
-        form.addWidget(text('Aucun serveur n’est configuré par défaut. Le dossier NovaSync-server contient le serveur et les instructions d’hébergement.'))
-        frame,right=card('Synchronisation','Favoris · historique · raccourcis · onglets');row.addWidget(frame,1)
-        self.identity=text('Non connecté','cardTitle');right.addWidget(self.identity)
-        self.status=text('Choisissez un serveur puis créez votre compte.');right.addWidget(self.status)
-        action(right,'Synchroniser maintenant',browser.sync_client.synchronize,True)
-        action(right,'Restaurer les onglets de l’autre appareil',browser.sync_client.restore_tabs)
-        action(right,'Se déconnecter',browser.sync_client.logout)
-        right.addWidget(text('Synchronisation automatique toutes les 2 minutes après connexion. Les mots de passe de sites et les cookies Google restent sur cet ordinateur. Le serveur peut lire les données synchronisées.'))
-        right.addStretch();outer.addLayout(row);outer.addStretch()
-        browser.sync_client.statusChanged.connect(self.status.setText);browser.sync_client.signedIn.connect(self.identity_changed)
+        super().__init__('account','Compte Google',browser)
+        outer=QVBoxLayout(self);outer.setContentsMargins(40,32,40,32);outer.setSpacing(14)
+        outer.addWidget(text('Votre compte','pageTitle'))
+        outer.addWidget(text('Retrouvez votre identité Google dans Nova.'))
+        frame,body=card('Google');frame.setMaximumWidth(580)
+        row=QHBoxLayout();self.avatar=QLabel();self.avatar.setFixedSize(56,56);self.avatar.setAlignment(Qt.AlignmentFlag.AlignCenter);self.avatar.setStyleSheet('background:#20132f;border-radius:28px;color:#d1afff;font-size:23px');row.addWidget(self.avatar)
+        labels=QVBoxLayout();self.identity=text('Non connecté','cardTitle');self.email=text('');labels.addWidget(self.identity);labels.addWidget(self.email);row.addLayout(labels);row.addStretch();body.addLayout(row)
+        self.status=text('Connectez-vous avec Google pour afficher votre nom et votre photo.');body.addWidget(self.status)
+        self.signin=action(body,'Continuer avec Google',lambda:browser.sync_client.google.start(''),True)
+        self.signout=action(body,'Se déconnecter',browser.sync_client.logout)
+        body.addWidget(text('Cette connexion identifie votre compte dans Nova. Elle ne connecte pas automatiquement les sites ouverts et n’active pas de synchronisation cloud.'))
+        outer.addWidget(frame);outer.addStretch()
+        browser.sync_client.statusChanged.connect(self.status.setText);browser.sync_client.signedIn.connect(self.identity_changed);browser.sync_client.avatarChanged.connect(self.refresh_avatar)
         self.identity_changed(browser.sync_client.email)
-    def identity_changed(self,email):self.identity.setText(email or 'Non connecté');self.password.clear();self.confirm.clear()
-    def authenticate(self,register):
-        if register and self.password.text()!=self.confirm.text():self.status.setText('Les deux mots de passe ne correspondent pas.');return
-        if len(self.password.text())<12:self.status.setText('Utilisez un mot de passe d’au moins 12 caractères.');return
-        self.browser.sync_client.login(self.endpoint.text(),self.email.text(),self.password.text(),register)
+    def identity_changed(self,email):
+        profile=self.browser.sync_client.google_profile;self.identity.setText(profile.get('name') or email or 'Non connecté');self.email.setText(email)
+        self.signin.setText('Changer de compte Google' if email else 'Continuer avec Google');self.signout.setVisible(bool(email));self.refresh_avatar()
+    def refresh_avatar(self):
+        client=self.browser.sync_client
+        if client.avatar.isNull():self.avatar.setPixmap(QPixmap());self.avatar.setText((client.google_profile.get('name') or client.email or 'G')[:1].upper())
+        else:self.avatar.setText('');self.avatar.setPixmap(client.avatar.scaled(56,56,Qt.AspectRatioMode.KeepAspectRatio,Qt.TransformationMode.SmoothTransformation))
 
 class SettingsPage(InternalPage):
     sections=[('Apparence','settings'),('Onglets','plus'),('Confidentialité et sécurité','vpn'),('VPN','vpn'),('Téléchargements','download'),('Extensions et publicités','extensions'),('Moteur de recherche','search'),('Optimiser le navigateur','video'),('Compte et synchronisation','profile'),('À propos','home'),('Identifiants et saisie','profile')]
@@ -178,7 +218,8 @@ class SettingsPage(InternalPage):
         brand=QHBoxLayout();logo=QLabel();logo.setPixmap(browser.windowIcon().pixmap(52,52));brand.addWidget(logo);brand.addWidget(text('Nova Browser','brand'));side.addLayout(brand);side.addSpacing(20)
         self.nav=QListWidget();self.nav.setIconSize(__import__('PySide6.QtCore',fromlist=['QSize']).QSize(23,23))
         for name,ico in self.sections:
-            item=QListWidgetItem(generated_icon(ico,26),'Compte et synchro' if name=='Compte et synchronisation' else name);item.setToolTip(name);item.setSizeHint(QSize(200,40));self.nav.addItem(item)
+            item=QListWidgetItem(generated_icon(ico,26),'Compte Google' if name=='Compte et synchronisation' else name);item.setToolTip(name);item.setSizeHint(QSize(200,40));self.nav.addItem(item)
+        self.nav.item(3).setHidden(True)
         self.nav.setStyleSheet('QListWidget{padding:0;border:0;background:transparent}QListWidget::item{margin:3px 6px 3px 1px;padding:6px 9px;border:1px solid transparent;border-radius:10px}QListWidget::item:selected{background:#241337;border:1px solid #7340a3;color:#eee5f7}')
         side.addWidget(self.nav);side.addWidget(text('Nova · Version de développement'));root.addWidget(sidebar)
         content=QWidget();self.content=content;content.setFixedWidth(min(1120,max(0,browser.width()-245)));col=QVBoxLayout(content);col.setContentsMargins(30,26,30,25);col.setSpacing(20)
@@ -254,7 +295,13 @@ class SettingsPage(InternalPage):
             action(c,'Ouvrir le bloqueur et ses réglages',b.open_blocker_settings)
             c.addWidget(text('Le filtrage est appliqué aux sites ouverts en mode compatible. Les publicités intégrées à certaines vidéos peuvent évoluer.'))
         elif index==6:
-            frame,c=card('Moteur de recherche');layout.addWidget(frame);combo=QComboBox();combo.addItems(['Google','DuckDuckGo','Bing']);combo.setCurrentText(b.data.get('preferences',{}).get('search_engine','Google'));combo.currentTextChanged.connect(b.set_search_engine);c.addWidget(combo)
+            frame,c=card('Moteur de recherche');layout.addWidget(frame);combo=QComboBox();combo.addItems(['Nova Search','Google','DuckDuckGo','Bing']);combo.setCurrentText(b.data.get('preferences',{}).get('search_engine','Nova Search'));combo.currentTextChanged.connect(b.set_search_engine);c.addWidget(combo)
+            c.addWidget(text('Nova Search conserve l’interface Nova. Un serveur connecté à Brave API active la recherche Web ; sans serveur, seul le petit index local est utilisé.'))
+            action(c,'Ouvrir Nova Search',lambda:b.new_tab(QUrl(b.search_url())))
+            action(c,'Configurer le serveur de recherche Web…',b.configure_search_server)
+            action(c,'Ajouter un site à l’index…',b.index_search_site)
+            search_status=text(str(b.search.index.stats()['pages'])+' pages dans l’index local.');c.addWidget(search_status);b.searchStatus.connect(search_status.setText)
+            c.addWidget(text('L’exploration se fait en arrière-plan, sur le site demandé uniquement, avec respect des exclusions robots.txt.'))
         elif index==7:
             frame,c=card('Optimiser le navigateur','Allégez les onglets et l’espace occupé, sans supprimer vos comptes.');layout.addWidget(frame)
             setting_action(c,'Optimisation rapide','Vider le cache et mettre en veille les onglets classiques inactifs.','Optimiser',b.optimize,True)
@@ -262,7 +309,7 @@ class SettingsPage(InternalPage):
             setting_action(c,'Fichiers temporaires','Conserver les favoris et les connexions.','Vider le cache',b.clear_cache)
             c.addWidget(text('La mise en veille concerne les onglets classiques : les pages peuvent se recharger à leur réactivation. Les lecteurs vidéo restent actifs pour préserver les directs. Le cache disque est plafonné à 256 Mio.'))
         elif index==8:
-            frame,c=card('Compte et synchronisation','Retrouvez vos favoris, raccourcis et onglets sur vos appareils.');layout.addWidget(frame);action(c,'Ouvrir mon compte Nova',b.open_account,True);c.addWidget(text('Nécessite un serveur Nova Sync à héberger. Aucun serveur public n’est configuré par défaut.'))
+            frame,c=card('Compte Google','Votre nom, votre photo et votre identité dans Nova.');layout.addWidget(frame);action(c,'Ouvrir mon compte',b.open_account,True);c.addWidget(text('Connexion Google uniquement pour le moment. La synchronisation cloud reste désactivée.'))
         elif index==10:
             frame,c=card('Identifiants et saisie','Un coffre local, protégé par votre session Windows.');layout.addWidget(frame)
             self.toggle(c,'Proposer d’enregistrer les mots de passe','save_passwords',True)
