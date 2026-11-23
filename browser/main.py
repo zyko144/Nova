@@ -149,7 +149,7 @@ class Browser(QMainWindow):
         self.setCentralWidget(self.tabs)
         chrome=QWidget(); chrome.setObjectName('chrome'); column=QVBoxLayout(chrome); column.setContentsMargins(0,0,0,0); column.setSpacing(0)
         self.titlebar=TitleBar(self); row=QHBoxLayout(self.titlebar); row.setContentsMargins(14,0,0,0); row.setSpacing(0)
-        logo=QLabel(); logo.setPixmap(icon('logo',40).pixmap(40,40)); row.addWidget(logo)
+        logo=QLabel();logo.setFixedWidth(36);logo.setAlignment(Qt.AlignmentFlag.AlignCenter);logo.setPixmap(icon('logo',30).pixmap(30,30));row.addWidget(logo)
         self.top_tabs=NovaTabBar(); self.top_tabs.setDocumentMode(True); self.top_tabs.setTabsClosable(True); self.top_tabs.setMovable(True); self.top_tabs.setExpanding(False)
         self.top_tabs.currentChanged.connect(self.activate_tab)
         self.top_tabs.tabCloseRequested.connect(self.close_tab)

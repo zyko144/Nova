@@ -1,5 +1,9 @@
 # Historique
 
+## 3.4.5
+
+- Premier onglet décalé de 4 pixels vers la gauche, avec un espace conservé autour du logo compact.
+
 ## 3.4.4
 
 - Correction de l'identifiant client Google pour correspondre au secret configuré localement.
