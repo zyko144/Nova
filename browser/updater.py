@@ -24,6 +24,9 @@ class UpdateToast(QFrame):
         super().__init__(browser,Qt.WindowType.Tool|Qt.WindowType.FramelessWindowHint|Qt.WindowType.WindowDoesNotAcceptFocus)
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating);self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
         self.setStyleSheet('QFrame{background:#110c19;border:1px solid #4a2a66;border-radius:15px}QLabel{color:#c8b9d8;border:0;background:transparent;font-size:12px}QPushButton{background:#28133d;color:#eee2fa;border:0;border-radius:8px;padding:7px 12px;font-size:12px}')
+        if browser.private:
+            from ui import neutral_style
+            self.setStyleSheet(neutral_style(self.styleSheet()))
         self.setFixedWidth(345);layout=QVBoxLayout(self);layout.setContentsMargins(18,16,18,16);layout.setSpacing(10)
         row=QHBoxLayout();symbol_label=QLabel();symbol_label.setPixmap(generated_icon(symbol,24).pixmap(24,24));symbol_label.setFixedSize(28,28);row.addWidget(symbol_label);heading=QLabel(title);heading.setStyleSheet('font-weight:600;color:#f2eafa;font-size:14px');row.addWidget(heading);row.addStretch()
         close=QPushButton();close.setIcon(generated_icon('close',14));close.setIconSize(QSize(14,14));close.setToolTip('Fermer');close.setFixedSize(24,24);close.setStyleSheet('QPushButton{padding:0;background:transparent;border:0;border-radius:7px}QPushButton:hover{background:#28183a}');close.clicked.connect(self.close);row.addWidget(close);layout.addLayout(row)
@@ -41,7 +44,7 @@ class Updater(QObject):
         super().__init__(browser);self.browser=browser;self.network=QNetworkAccessManager(self);self.available=None;self.busy=False;self.checked_at=0.;self.etag=b'';self.notified='';self.toast=None;self.archive=None
         self.directory=browser.root/'updates';self.directory.mkdir(exist_ok=True)
         self.timer=QTimer(self);self.timer.setInterval(300000);self.timer.timeout.connect(self.check)
-        if QApplication.applicationName()=='NovaBrowser':
+        if not browser.private and QApplication.applicationName()=='NovaBrowser':
             self.timer.start();QTimer.singleShot(1500,self.startup)
             QApplication.instance().applicationStateChanged.connect(self.focused)
     def startup(self):
@@ -57,6 +60,7 @@ class Updater(QObject):
     def focused(self,state):
         if state==Qt.ApplicationState.ApplicationActive and time.monotonic()-self.checked_at>60:self.check()
     def notify(self,title,message,callback=None,action_text='Voir la mise à jour',symbol='download'):
+        if self.browser.presentation and title!='Mode présentation':return
         if self.toast:
             try:self.toast.close()
             except RuntimeError:pass
@@ -93,15 +97,17 @@ class Updater(QObject):
     def details(self):
         if not self.available:return
         release=self.available;dialog=NovaDialog(self.browser,'Mise à jour Nova',release.get('tag_name',''))
-        notes=QPlainTextEdit();notes.setReadOnly(True);notes.setPlainText((release.get('body') or 'Améliorations et correctifs de Nova Browser.')[:6000]);notes.setMaximumHeight(170);notes.setStyleSheet('background:#08050e;color:#cdbbdc;border:1px solid #32203f;border-radius:9px;padding:10px');dialog.body.addWidget(notes)
+        notes=QPlainTextEdit();notes.setReadOnly(True);notes.setPlainText((release.get('body') or 'Améliorations et correctifs de Nova.')[:6000]);notes.setMaximumHeight(170);notes.setStyleSheet('background:#08050e;color:#cdbbdc;border:1px solid #32203f;border-radius:9px;padding:10px');dialog.body.addWidget(notes)
         asset=release_asset(release)
         if asset:
             button=QPushButton('Télécharger la mise à jour');button.setObjectName('primary');button.clicked.connect(lambda:(dialog.accept(),self.download(asset)));dialog.body.addWidget(button,0,Qt.AlignmentFlag.AlignRight)
         else:
             label=QLabel('Le paquet Windows vérifiable n’est pas encore disponible.');label.setWordWrap(True);dialog.body.addWidget(label)
         dialog.exec()
-    def download(self,asset):
+    def download(self,asset,verified=False):
         if self.busy:return
+        if not verified:
+            self.verify_release_signature(asset);return
         self.busy=True;self.statusChanged.emit('Téléchargement de la mise à jour…')
         version=self.available['tag_name'].lstrip('v');path=self.directory/('Nova-'+version+'.zip.part')
         try:handle=path.open('wb')
@@ -125,6 +131,25 @@ class Updater(QObject):
                 path.unlink(missing_ok=True);self.statusChanged.emit('Téléchargement incomplet ou intégrité non vérifiée. Installation annulée.');return
             final=path.with_suffix('');path.replace(final);self.archive=(final,digest.hexdigest(),version);self.statusChanged.emit('Mise à jour vérifiée, prête à installer.');self.install_prompt()
         reply.readyRead.connect(read);reply.finished.connect(finished)
+    def verify_release_signature(self,asset):
+        manifest=next((x for x in self.available.get('assets',[]) if x.get('name')=='NOVA-UPDATE.json'),None)
+        url=urlsplit(manifest.get('browser_download_url','') if manifest else '')
+        prefix='/'+REPOSITORY+'/releases/download/'+self.available['tag_name']+'/'
+        if not manifest or url.scheme!='https' or url.netloc!='github.com' or not url.path.startswith(prefix):
+            self.statusChanged.emit('Signature de mise à jour absente. Installation annulée.');return
+        self.busy=True;self.statusChanged.emit('Vérification de la signature Nova…')
+        request=QNetworkRequest(QUrl(manifest['browser_download_url']));request.setTransferTimeout(15000);request.setAttribute(QNetworkRequest.Attribute.RedirectPolicyAttribute,QNetworkRequest.RedirectPolicy.NoLessSafeRedirectPolicy)
+        reply=self.network.get(request)
+        def done():
+            self.busy=False
+            try:
+                from update_signature import verify_manifest
+                raw=bytes(reply.readAll())
+                if reply.error()!=QNetworkReply.NetworkError.NoError or len(raw)>4096 or not verify_manifest(json.loads(raw),asset,self.available['tag_name']):raise ValueError()
+                self.download(asset,True)
+            except (ValueError,TypeError,KeyError):self.statusChanged.emit('Signature Nova invalide. Installation bloquée.')
+            finally:reply.deleteLater()
+        reply.finished.connect(done)
     def install_prompt(self):
         if not self.archive:return
         dialog=NovaDialog(self.browser,'Mise à jour prête','Nova va se fermer, installer la nouvelle version et redémarrer. Vos profils et données sont conservés.')

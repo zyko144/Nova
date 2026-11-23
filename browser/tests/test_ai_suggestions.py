@@ -47,7 +47,7 @@ class AITest(unittest.TestCase):
         finally:browser.close();self.app.processEvents()
     def test_default_browser_registration_uses_user_capabilities(self):
         import default_browser
-        with patch.object(sys,'frozen',True,create=True),patch.object(default_browser.winreg,'CreateKey') as create,patch.object(default_browser.winreg,'SetValueEx') as write,patch.object(default_browser.QDesktopServices,'openUrl') as open_settings:
+        with patch.object(sys,'frozen',True,create=True),patch.object(default_browser.winreg,'OpenKey'),patch.object(default_browser.winreg,'DeleteValue'),patch.object(default_browser.winreg,'CreateKey') as create,patch.object(default_browser.winreg,'SetValueEx') as write,patch.object(default_browser.QDesktopServices,'openUrl') as open_settings:
             default_browser.register_browser();self.assertTrue(open_settings.called)
             values=[call.args for call in write.call_args_list];self.assertTrue(any(args[1]=='https' and args[-1]=='NovaBrowserURL' for args in values));self.assertTrue(any('--open-url "%1"' in str(args[-1]) for args in values));self.assertFalse(any('UserChoice' in str(call.args) for call in create.call_args_list))
     def test_default_browser_prompt_is_once_and_never_changes_choice(self):

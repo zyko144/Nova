@@ -1,3 +1,15 @@
+## 4.0.0 — Nova
+
+- Navigation privée dans une fenêtre noire et grise, vrai logo Nova en argent, profil séparé en mémoire, sans historique, recherches récentes, coffre, compte Nova ni suggestions en ligne. Nettoyage des fichiers temporaires à la fermeture.
+- Onglets épinglés, son par onglet, aperçu au survol, état de consommation, bloc-notes, mode concentration et mode présentation.
+- Avertissement pour les formulaires non envoyés. Restauration de session avec état épinglé/muet.
+- Traduction française de la page ou de la sélection depuis le clic droit (Google Traduction). Captures PNG avec sélection de zone et export de page complète en PDF.
+- Panneau compact de protection par site : autorisations temporaires, arrêt de l’activité, suppression des données du site et ouverture en session isolée.
+- Alertes locales de domaines suspects et fichiers exécutables/doubles extensions, HTTPS prioritaire sans retour automatique en HTTP, protection des liens sensibles et du presse-papiers, journal en mémoire.
+- Windows Hello optionnel pour le remplissage du coffre, mises à jour signées Ed25519, téléchargements classiques et compatibles regroupés avec reprise lorsque le moteur/serveur la permet.
+- Fenêtres de connexion conservant le lien avec le site appelant, y compris les fenêtres initialement vides ; moteur compatible pour Pinterest. Les refus de Google concernant les navigateurs embarqués ne sont pas contournés.
+- Nom affiché Nova, exécutable Nova.exe, intégration au menu Démarrer, démarrage Windows et plein écran réglables.
+
 ## 3.9.0
 
 - Suggestions en ligne via le service Nova partagé : aucune clé à saisir ni secret distribué dans le navigateur.

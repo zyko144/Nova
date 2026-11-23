@@ -41,22 +41,33 @@ jobs:
         run: ./browser/build.ps1
       - name: Smoke test packaged browser
         run: |
-          $process = Start-Process browser/dist/NovaBrowser/NovaBrowser.exe -ArgumentList '--smoke-test' -PassThru -WindowStyle Hidden
+          $process = Start-Process browser/dist/Nova/Nova.exe -ArgumentList '--smoke-test' -PassThru -WindowStyle Hidden
           if (-not $process.WaitForExit(45000)) { Stop-Process -Id $process.Id; throw 'Smoke test timed out' }
           if ($process.ExitCode -ne 0) { throw 'Packaged browser failed' }
+      - name: Smoke test private compatible engine
+        run: |
+          $testProfile = Join-Path $env:RUNNER_TEMP 'Nova-private-ci'
+          $process = Start-Process browser/dist/Nova/MediaHost/NovaMediaHost.exe -ArgumentList @('0', $testProfile, 'about:blank', '--private', '--self-test') -PassThru -WindowStyle Hidden
+          if (-not $process.WaitForExit(45000)) { Stop-Process -Id $process.Id; throw 'Private engine timed out' }
+          if ($process.ExitCode -ne 0) { throw 'Private engine smoke test failed' }
       - name: Package release
         run: |
-          Compress-Archive -Path browser/dist/NovaBrowser/* -DestinationPath NovaBrowser-Windows-x64.zip -CompressionLevel Optimal
+          Copy-Item browser/dist/Nova/Nova.exe browser/dist/Nova/NovaBrowser.exe
+          Compress-Archive -Path browser/dist/Nova/* -DestinationPath NovaBrowser-Windows-x64.zip -CompressionLevel Optimal
           $hash = (Get-FileHash NovaBrowser-Windows-x64.zip -Algorithm SHA256).Hash.ToLowerInvariant()
           "$hash  NovaBrowser-Windows-x64.zip" | Set-Content SHA256SUMS.txt
+      - name: Sign release manifest
+        env:
+          NOVA_UPDATE_SIGNING_KEY: ${{ secrets.NOVA_UPDATE_SIGNING_KEY }}
+        run: python browser/sign_release.py NovaBrowser-Windows-x64.zip $env:NOVA_RELEASE_TAG
       - name: Publish GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release view $env:NOVA_RELEASE_TAG --repo $env:GITHUB_REPOSITORY 2>$null
           if ($LASTEXITCODE -eq 0) {
-            gh release upload $env:NOVA_RELEASE_TAG NovaBrowser-Windows-x64.zip SHA256SUMS.txt --repo $env:GITHUB_REPOSITORY --clobber
+            gh release upload $env:NOVA_RELEASE_TAG NovaBrowser-Windows-x64.zip SHA256SUMS.txt NOVA-UPDATE.json --repo $env:GITHUB_REPOSITORY --clobber
           } else {
-            gh release create $env:NOVA_RELEASE_TAG NovaBrowser-Windows-x64.zip SHA256SUMS.txt --repo $env:GITHUB_REPOSITORY --title "Nova Browser $env:NOVA_RELEASE_TAG" --notes-file CHANGELOG.md --target $env:GITHUB_SHA
+            gh release create $env:NOVA_RELEASE_TAG NovaBrowser-Windows-x64.zip SHA256SUMS.txt NOVA-UPDATE.json --repo $env:GITHUB_REPOSITORY --title "Nova $env:NOVA_RELEASE_TAG" --notes-file CHANGELOG.md --target $env:GITHUB_SHA
           }
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

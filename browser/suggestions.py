@@ -49,6 +49,7 @@ class AddressSuggestions:
         self.completer.popup().setStyleSheet('QListView{background:#0e0b14;color:#d9cce7;border:1px solid #382b44;border-radius:12px;padding:5px;outline:0}QScrollBar:vertical{width:5px;background:transparent}QScrollBar::handle:vertical{background:#3c2b4e;border-radius:2px}QScrollBar::add-line:vertical,QScrollBar::sub-line:vertical{height:0}')
         browser.address.setCompleter(self.completer);browser.address.textEdited.connect(self.update);self.completer.activated[QModelIndex].connect(self.choose_index)
     def update(self,value):
+        if self.browser.presentation:self.completer.popup().hide();return
         items=suggestions(value,self.browser.data);self.items=items;self.destinations=dict(items);self.model.setStringList([label for label,url in items])
         self.completer.setCompletionPrefix('')
         if items:

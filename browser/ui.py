@@ -29,7 +29,7 @@ class NovaDialog(QDialog):
         super().__init__(parent)
         self.setWindowFlags(Qt.WindowType.Dialog|Qt.WindowType.FramelessWindowHint)
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground)
-        self.setStyleSheet(DIALOG_STYLE); self.setMinimumWidth(430)
+        self.setStyleSheet(neutral_style(DIALOG_STYLE) if getattr(parent,'private',False) else DIALOG_STYLE); self.setMinimumWidth(430)
         self.body=QVBoxLayout(self);self.body.setContentsMargins(26,24,26,24);self.body.setSpacing(16)
         row=QHBoxLayout();heading=QLabel(title);heading.setObjectName('heading');row.addWidget(heading);row.addStretch()
         close=QPushButton('×');close.setFixedSize(28,28);close.setObjectName('quiet');close.clicked.connect(self.reject);row.addWidget(close);self.body.addLayout(row)
@@ -93,10 +93,12 @@ class NovaTabBar(QTabBar):
         self.setStyleSheet('QTabBar{background:transparent;border:0}QTabBar::tab{height:42px;min-width:220px;padding:0 12px;margin:0;border:0;background:transparent}QTabBar QToolButton{background:transparent;border:0;border-radius:8px;padding:0}QTabBar QToolButton:hover{background:rgba(130,70,200,30)}')
     def available_width(self):return max(80,self.parentWidget().width()-294) if self.parentWidget() else 1000
     def tabSizeHint(self,index):
+        view=self.tabData(index)
+        if view is not None and getattr(view,'_pinned',False):return QSize(46,54)
         preferred=180 if getattr(self,'compact',False) else 240
         return QSize(max(44,min(preferred,self.available_width()//max(1,self.count()))),54)
     def minimumTabSizeHint(self,index):return self.tabSizeHint(index)
-    def sizeHint(self):return QSize(min(self.available_width(),self.count()*self.tabSizeHint(0).width()),54)
+    def sizeHint(self):return QSize(min(self.available_width(),sum(self.tabSizeHint(i).width() for i in range(self.count()))),54)
     def minimumSizeHint(self):return QSize(44,54)
     def paintEvent(self,event):
         painter=QPainter(self);painter.setRenderHint(QPainter.RenderHint.Antialiasing)
@@ -105,23 +107,40 @@ class NovaTabBar(QTabBar):
             rect=self.tabRect(i);selected=i==self.currentIndex()
             view=self.tabData(i);state=''
             if view is not None:
-                if getattr(view,'_floating',False):state='↗'
+                if getattr(view,'_muted',False):state='×♪'
+                elif getattr(view,'_floating',False):state='↗'
                 elif getattr(view,'_nova_suspended',False):state='Ⅱ'
                 elif getattr(view,'_audible',False):state='♪'
                 elif hasattr(view,'page'):
                     try:state='♪' if view.page().recentlyAudible() else ''
                     except RuntimeError:pass
             if selected:
-                painter.setPen(Qt.PenStyle.NoPen);painter.setBrush(QColor('#191224'));painter.drawRoundedRect(QRectF(rect).adjusted(0,9,0,-8),15,15)
-            narrow=rect.width()<85
+                painter.setPen(Qt.PenStyle.NoPen);painter.setBrush(QColor('#242424' if getattr(self,'private_mode',False) else '#191224'));painter.drawRoundedRect(QRectF(rect).adjusted(0,9,0,-8),15,15)
+            pinned=bool(view is not None and getattr(view,'_pinned',False));narrow=rect.width()<85
             close=self.tabButton(i,QTabBar.ButtonPosition.RightSide)
-            if close:close.setVisible(not narrow or selected)
-            if getattr(self,'show_icons',True) and (not narrow or not selected):
+            if close:close.setVisible(not pinned and (not narrow or selected))
+            if getattr(self,'show_icons',True) and (pinned or not narrow or not selected):
                 image=self.tabIcon(i).pixmap(16,16);painter.drawPixmap(rect.x()+(rect.width()-16)//2 if narrow else rect.x()+14,rect.center().y()-8,image)
             if narrow:continue
             if state:
                 painter.setPen(QColor('#b68bdd'));painter.drawText(rect.adjusted(0,0,-33,0),Qt.AlignmentFlag.AlignVCenter|Qt.AlignmentFlag.AlignRight,state)
-            painter.setPen(QColor('#eee5fa' if selected else '#9488a7'))
+            painter.setPen(QColor('#eeeeee' if selected else '#999999') if getattr(self,'private_mode',False) else QColor('#eee5fa' if selected else '#9488a7'))
             textRect=rect.adjusted(47 if getattr(self,'show_icons',True) else 17,0,-54 if state else -34,0)
             text=painter.fontMetrics().elidedText(self.tabText(i),Qt.TextElideMode.ElideRight,textRect.width())
             painter.drawText(textRect,Qt.AlignmentFlag.AlignVCenter|Qt.AlignmentFlag.AlignLeft,text)
+
+
+def neutral_style(style):
+    import re
+    def gray(match):
+        c=QColor(match.group());v=round(.2126*c.red()+.7152*c.green()+.0722*c.blue());return '#'+format(v,'02x')*3
+    style=re.sub(r'#[0-9a-fA-F]{6}(?![0-9a-fA-F])',gray,style)
+    def rgba(match):
+        r,g,b,a=match.groups();v=round(.2126*int(r)+.7152*int(g)+.0722*int(b));return f'rgba({v},{v},{v},{a})'
+    return re.sub(r'rgba\((\d+),\s*(\d+),\s*(\d+),\s*([\d.]+)\)',rgba,style)
+
+
+def monochrome(icon,size=24):
+    pixmap=icon.pixmap(size,size)
+    if pixmap.isNull():return icon
+    painter=QPainter(pixmap);painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceIn);painter.fillRect(pixmap.rect(),QColor('#bbbbbb'));painter.end();return QIcon(pixmap)

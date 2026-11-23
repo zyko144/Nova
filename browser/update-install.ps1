@@ -21,7 +21,7 @@ function Save-Result([bool]$Success,[string]$Message) {
 }
 try {
     if ($Version -notmatch '^\d+\.\d+\.\d+$' -or $Sha256 -notmatch '^[a-fA-F0-9]{64}$') { throw 'Métadonnées de mise à jour invalides.' }
-    if (-not (Test-Path -LiteralPath (Join-Path $installFull 'NovaBrowser.exe')) -or -not (Test-Path -LiteralPath (Join-Path $installFull '_internal'))) { throw 'Dossier Nova invalide.' }
+    if ((-not (Test-Path -LiteralPath (Join-Path $installFull 'Nova.exe')) -and -not (Test-Path -LiteralPath (Join-Path $installFull 'NovaBrowser.exe'))) -or -not (Test-Path -LiteralPath (Join-Path $installFull '_internal'))) { throw 'Dossier Nova invalide.' }
     if (-not $archiveFull.StartsWith($stateFull.TrimEnd('\')+'\',[StringComparison]::OrdinalIgnoreCase)) { throw 'Archive hors du dossier de mise à jour.' }
     $hasher=[Security.Cryptography.SHA256]::Create()
     $archiveStream=[IO.File]::OpenRead($archiveFull)
@@ -45,7 +45,7 @@ try {
         }
     } finally { $zip.Dispose() }
     [IO.Compression.ZipFile]::ExtractToDirectory($archiveFull,$stageFull)
-    if (-not (Test-Path -LiteralPath (Join-Path $stageFull 'NovaBrowser.exe')) -or -not (Test-Path -LiteralPath (Join-Path $stageFull '_internal')) -or -not (Test-Path -LiteralPath (Join-Path $stageFull 'MediaHost'))) { throw 'Paquet Nova incomplet.' }
+    if (-not (Test-Path -LiteralPath (Join-Path $stageFull 'Nova.exe')) -or -not (Test-Path -LiteralPath (Join-Path $stageFull '_internal')) -or -not (Test-Path -LiteralPath (Join-Path $stageFull 'MediaHost'))) { throw 'Paquet Nova incomplet.' }
     # These two exact sibling paths are checked before either directory move.
     foreach($target in @($stageFull,$backupFull)) {
         if ([IO.Directory]::GetParent([IO.Path]::GetFullPath($target)).FullName -ne $parentFolder -or $target -eq $installFull) { throw 'Dossier de remplacement invalide.' }
@@ -55,7 +55,7 @@ try {
     Move-Item -LiteralPath $stageFull -Destination $installFull
     $newInstalled=$true
     Save-Result $true ('Nova '+$Version+' est installé. Vos données ont été conservées.')
-    Start-Process -FilePath (Join-Path $installFull 'NovaBrowser.exe') -WindowStyle Hidden
+    Start-Process -FilePath (Join-Path $installFull 'Nova.exe') -WindowStyle Hidden
     # The previous installation is intentionally retained as a rollback backup.
 } catch {
     $message=$_.Exception.Message
@@ -63,6 +63,6 @@ try {
         Move-Item -LiteralPath $backupFull -Destination $installFull
     }
     Save-Result $false ('Installation interrompue : '+$message)
-    if (Test-Path -LiteralPath (Join-Path $installFull 'NovaBrowser.exe')) { Start-Process -FilePath (Join-Path $installFull 'NovaBrowser.exe') -WindowStyle Hidden }
+    if (Test-Path -LiteralPath (Join-Path $installFull 'Nova.exe')) { Start-Process -FilePath (Join-Path $installFull 'Nova.exe') -WindowStyle Hidden }
     exit 1
 }

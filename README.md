@@ -156,3 +156,42 @@ paramètres de recherche. Le quota est partagé par tous les utilisateurs. Cache
 éphémère et limitation par instance ; les protections ne remplacent pas une
 limitation globale persistante pour une diffusion à grande échelle.
 Voir `ai-server/README.md` pour l'exploitation du service.
+
+## Confidentialité et outils (4.0)
+
+`Ctrl+Maj+N` ouvre une fenêtre privée noire/grise avec le logo Nova d’origine.
+Qt utilise un profil off-the-record et un cache mémoire ; WebView2 utilise son
+mode InPrivate dans un répertoire temporaire propre à la fenêtre. Compte Nova,
+coffre, historique, recherches récentes, session récupérable et suggestions en
+ligne sont désactivés. Un assistant de nettoyage retire le répertoire temporaire
+après la fermeture des processus compatibles. Les fichiers téléchargés et les
+captures demandées restent sur disque. Ce mode ne rend pas anonyme auprès des
+sites, du fournisseur d’accès ou du réseau ; ce n’est pas un VPN.
+
+Menu Nova > Outils de page : traduction française via Google Traduction, capture
+PNG/zone, export PDF de la page complète, notes, activité des onglets, concentration
+et présentation. Les notes privées restent en mémoire. Un clic droit sur un onglet
+permet de l’épingler et de couper son son. Les aperçus d’onglets restent en mémoire.
+
+Le bouclier près de l’adresse ouvre les contrôles du site. Les autorisations sont
+limitées à l’onglet et à une durée (5 minutes pour « Cette fois », 10 minutes pour
+l’autre choix), et peuvent être retirées. L’arrêt d’urgence quitte le document.
+Les indicateurs caméra/micro reposent sur les demandes d’autorisation et les pistes
+média instrumentées ; ils ne remplacent pas les indicateurs Windows. Les alertes
+anti-hameçonnage sont des heuristiques locales, pas une liste de réputation exhaustive.
+La mise à jour doit présenter un manifeste signé Ed25519 par la clé publique
+intégrée à Nova, puis réussir le contrôle SHA-256. La clé de signature privée reste
+un secret GitHub Actions ; aucune clé privée n’est distribuée.
+
+La traduction envoie le texte sélectionné ou l’URL à Google Traduction et ne
+fonctionne pas forcément sur les pages nécessitant une session. Les connexions
+Google sur les sites conservent le mécanisme de fenêtre de retour ; un refus OAuth
+pour moteur embarqué reste possible. Le compte Google de Nova utilise son parcours
+système distinct. Les téléchargements interrompus ne sont repris que si le moteur
+et le serveur le permettent ; pas de reprise garantie après fermeture de Nova.
+
+Paramètres > Compte et démarrage : lancement à la connexion Windows et plein écran
+(F11 pour quitter). Les intégrations Windows utilisent uniquement le compte courant.
+Le nom de stockage NovaBrowser reste stable pour conserver les profils existants.
+Une copie de compatibilité de l’exécutable demeure dans l’archive GitHub pour les
+anciennes versions de l’assistant de mise à jour ; utiliser Nova.exe.

@@ -6,7 +6,7 @@ from PySide6.QtGui import QPixmap,QIcon
 
 def media_url(url):
     host = url.host().lower()
-    return host in ('youtu.be','youtube.com','www.youtube.com','m.youtube.com','music.youtube.com','twitch.tv','www.twitch.tv','player.twitch.tv')
+    return host in ('pinterest.com','www.pinterest.com','pinterest.fr','www.pinterest.fr','fr.pinterest.com','youtu.be','youtube.com','www.youtube.com','m.youtube.com','music.youtube.com','twitch.tv','www.twitch.tv','player.twitch.tv')
 
 def helper_path():
     base = Path(sys.executable).parent if getattr(sys, 'frozen', False) else Path(__file__).parent
@@ -28,6 +28,7 @@ class MediaView(QWidget):
     credentialCaptured = Signal(object)
     fillRequested = Signal(str)
     historyChanged = Signal()
+    securityEvent = Signal(object)
     mediaPaused = Signal(int)
     def __init__(self,url,profile,parent=None):
         super().__init__(parent)
@@ -55,7 +56,7 @@ class MediaView(QWidget):
         if self.stopping or self.process.state()!=QProcess.ProcessState.NotRunning:return
         path=helper_path()
         if not path.exists():
-            self.label.setText('Moteur vidéo manquant : conservez le dossier MediaHost près de NovaBrowser.exe.'); return
+            self.label.setText('Moteur vidéo manquant : conservez le dossier MediaHost près de Nova.exe.'); return
         if self.pending_url:self.arguments[2]=self.pending_url;self.pending_url=None
         self.process.start(str(path),self.arguments)
     def process_error(self,error):
@@ -67,6 +68,14 @@ class MediaView(QWidget):
             try: event=json.loads(line)
             except (ValueError,UnicodeError): continue
             kind=event.get('type'); value=event.get('value')
+            if kind=='thumbnail':
+                try:
+                    picture=QPixmap();picture.loadFromData(base64.b64decode(value));self._preview=picture
+                except (ValueError,TypeError):pass
+                continue
+            if kind=='resources':self._renderer_memory=int(event.get('memory',0));continue
+            if kind in ('security','permission','download-request','download-state','capture-state','dirty','translate','copy-link','screenshot'):
+                self.securityEvent.emit(event);continue
             if kind=='url':
                 if self.pending_url and not self.ready:continue
                 self._url=QUrl(value); self.urlChanged.emit(self._url)

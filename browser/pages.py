@@ -71,7 +71,7 @@ class SyncClient(QWidget):
         self.google_renew=QTimer(self);self.google_renew.setInterval(45*60*1000);self.google_renew.timeout.connect(self.load_google_identity)
         self.restored.connect(self.restore_identity)
         self.restoreFailed.connect(self.restore_failure)
-        QTimer.singleShot(0,self.load_google_identity)
+        if not browser.private:QTimer.singleShot(0,self.load_google_identity)
     def set_google_identity(self,claims,token,nonce,refresh_token=''):
         from google_session import save_session
         if self.google_profile.get('sub')!=claims.get('sub'):self.google_refresh=''
@@ -226,12 +226,12 @@ class AccountPage(InternalPage):
         else:self.avatar.setText('');self.avatar.setPixmap(client.avatar.scaled(56,56,Qt.AspectRatioMode.KeepAspectRatio,Qt.TransformationMode.SmoothTransformation))
 
 class SettingsPage(InternalPage):
-    sections=[('Apparence','settings'),('Onglets','plus'),('Confidentialité et sécurité','vpn'),('VPN','vpn'),('Téléchargements','download'),('Extensions et publicités','extensions'),('Moteur de recherche','search'),('Optimiser le navigateur','video'),('Compte et synchronisation','profile'),('À propos','home'),('Identifiants et saisie','profile')]
+    sections=[('Apparence','settings'),('Onglets','plus'),('Confidentialité et sécurité','vpn'),('VPN','vpn'),('Téléchargements','download'),('Extensions et publicités','extensions'),('Moteur de recherche','search'),('Optimiser le navigateur','video'),('Compte et démarrage','profile'),('À propos','home'),('Identifiants et saisie','profile')]
     def __init__(self,browser):
         super().__init__('settings','Paramètres',browser)
         root=QHBoxLayout(self);root.setContentsMargins(0,0,0,0);root.setSpacing(0)
         sidebar=QFrame();sidebar.setObjectName('sidebar');sidebar.setFixedWidth(245);side=QVBoxLayout(sidebar);side.setContentsMargins(18,22,18,20)
-        brand=QHBoxLayout();logo=QLabel();logo.setPixmap(browser.windowIcon().pixmap(52,52));brand.addWidget(logo);brand.addWidget(text('Nova Browser','brand'));side.addLayout(brand);side.addSpacing(20)
+        brand=QHBoxLayout();logo=QLabel();logo.setPixmap(browser.windowIcon().pixmap(52,52));brand.addWidget(logo);brand.addWidget(text('Nova','brand'));side.addLayout(brand);side.addSpacing(20)
         self.nav=QListWidget();self.nav.setIconSize(__import__('PySide6.QtCore',fromlist=['QSize']).QSize(23,23))
         for name,ico in self.sections:
             item=QListWidgetItem(generated_icon(ico,26),'Compte Google' if name=='Compte et synchronisation' else name);item.setToolTip(name);item.setSizeHint(QSize(200,40));self.nav.addItem(item)
@@ -293,6 +293,9 @@ class SettingsPage(InternalPage):
         elif index==2:
             frame,c=card('Confidentialité et sécurité','Les certificats HTTPS et la sandbox restent activés.');layout.addWidget(frame)
             self.toggle(c,'Activer uBlock Origin Lite dans le moteur vidéo','adblock',True,b.set_adblock)
+            action(c,'Nouvelle fenêtre privée',b.private_window)
+            action(c,'Protection de ce site',b.site_panel)
+            action(c,'Journal de protection',b.protection_log)
             self.toggle(c,'Limiter les adresses réseau exposées par WebRTC (moteur classique)','webrtc_public',True,b.apply_web_preferences)
             frame,c=card('Données de navigation');layout.addWidget(frame)
             setting_action(c,'Historique et cache','Supprimer les pages visitées et les fichiers temporaires.','Effacer',b.clear)
@@ -325,11 +328,16 @@ class SettingsPage(InternalPage):
             frame,c=card('Optimiser le navigateur','Allégez les onglets et l’espace occupé, sans supprimer vos comptes.');layout.addWidget(frame)
             self.toggle(c,'Mettre en pause les onglets en arrière-plan','pause_background_tabs',True,b.set_background_pause)
             c.addWidget(text('Les vidéos et l’audio sont mis en pause dès que vous quittez un onglet. Au retour, seule une lecture interrompue par Nova reprend. Désactivez cette option pour écouter un live en arrière-plan.'))
+            action(c,'Voir l’activité et la mémoire des onglets',b.resource_panel)
             setting_action(c,'Optimisation rapide','Vider le cache et mettre en veille les onglets classiques inactifs.','Optimiser',b.optimize,True)
             setting_action(c,'Onglets inactifs','Réduire l’activité des onglets classiques en arrière-plan.','Mettre en veille',b.sleep_tabs)
             setting_action(c,'Fichiers temporaires','Conserver les favoris et les connexions.','Vider le cache',b.clear_cache)
             c.addWidget(text('L’optimisation manuelle allège les onglets classiques. La pause des lecteurs vidéo en arrière-plan se règle avec l’option ci-dessus. Le cache disque est plafonné à 256 Mio.'))
         elif index==8:
+            from startup import set_startup
+            frame,start=card('Démarrage');layout.addWidget(frame)
+            self.toggle(start,'Lancer Nova à l’ouverture de Windows','start_with_windows',True,set_startup)
+            self.toggle(start,'Ouvrir en plein écran (F11 pour quitter)','start_fullscreen',True)
             action(layout,'Définir Nova comme navigateur par défaut',b.make_default)
             action(layout,"Importer mes données…",b.open_import)
             frame,c=card('Compte Google','Votre nom, votre photo et votre identité dans Nova.');layout.addWidget(frame);action(c,'Ouvrir mon compte',b.open_account,True);c.addWidget(text('Connexion Google uniquement pour le moment. La synchronisation cloud reste désactivée.'))
@@ -338,10 +346,11 @@ class SettingsPage(InternalPage):
             self.toggle(c,'Proposer d’enregistrer les mots de passe','save_passwords',True)
             self.toggle(c,'Remplir les identifiants enregistrés sur le même site','autofill',True)
             self.toggle(c,'Retenir les adresses e-mail utilisées dans les formulaires','remember_emails',True)
+            self.toggle(c,'Déverrouiller le remplissage avec Windows Hello','hello_vault',False)
             action(c,'Gérer les identifiants',b.open_vault)
             c.addWidget(text('Nova demande votre accord avant chaque nouvel enregistrement de mot de passe. Le remplissage est limité au même site HTTPS. Le coffre n’est jamais envoyé à Nova Sync.'))
         else:
-            frame,c=card('Nova Browser '+VERSION,'Qt WebEngine + WebView2');layout.addWidget(frame)
+            frame,c=card('Nova '+VERSION,'Qt WebEngine + WebView2');layout.addWidget(frame)
             c.addWidget(text('Interface Nova, moteur vidéo compatible et uBlock Origin Lite. Version de développement non auditée.'))
             frame,c=card('Mises à jour','Les nouvelles versions sont distribuées depuis zyko144/Nova sur GitHub.');layout.addWidget(frame)
             self.update_status=text('Version installée : '+VERSION);c.addWidget(self.update_status)

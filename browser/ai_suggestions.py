@@ -27,13 +27,13 @@ class AISuggestions(QObject):
     def request(self,source,query,callback):
         self.pending.pop(source,None)
         self.pending[source]=(query,callback)
-        if not self.browser.data['preferences'].get('ai_suggestions',True) or not NOVA_AI_ENDPOINT or not permitted(query):return
+        if self.browser.private or self.browser.presentation or not self.browser.data['preferences'].get('ai_suggestions',True) or not NOVA_AI_ENDPOINT or not permitted(query):return
         cache=self.cache.get(query.casefold().strip())
         if cache and time.monotonic()-cache[0]<900:self.timer.stop();callback(query,cache[1]);return
         self.timer.start(700)
     def send(self):
         if self.reply or not self.pending or time.monotonic()<self.backoff:return
-        if not self.browser.data['preferences'].get('ai_suggestions',True) or not NOVA_AI_ENDPOINT:return
+        if self.browser.private or self.browser.presentation or not self.browser.data['preferences'].get('ai_suggestions',True) or not NOVA_AI_ENDPOINT:return
         if time.monotonic()-self.last_sent<2.5:self.timer.start(2500);return
         query,callback=list(self.pending.values())[-1]
         if not permitted(query):return
@@ -53,7 +53,7 @@ class AISuggestions(QObject):
                 raw=bytes(reply.readAll())
                 if len(raw)>65536:return
                 data=json.loads(raw);values=clean_values(json.dumps(data),query)
-                if not self.browser.data['preferences'].get('ai_suggestions',True):return
+                if self.browser.private or self.browser.presentation or not self.browser.data['preferences'].get('ai_suggestions',True):return
                 self.cache[query.casefold().strip()]=(time.monotonic(),values)
                 while len(self.cache)>80:self.cache.popitem(last=False)
                 for current,deliver in list(self.pending.values()):
