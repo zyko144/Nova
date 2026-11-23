@@ -16,6 +16,8 @@ class Features:
     windows=[]
     cleanup_jobs=[]
     def init_features(self):
+        if not self.private:QApplication.instance().setProperty('nova_text_services',self.data['preferences'].get('text_services',True))
+        self._private_locked=False;self._lock_overlay=None
         self.events=[];self.grants={};self.http_exceptions=set();self.trusted_once=set();self.presentation=False;self.focus_mode=False;self.private_previews={};self.hello_until=0
         from windows_hello import Hello
         self.hello=Hello(self)
@@ -58,15 +60,61 @@ class Features:
         from design import render_home
         return render_home(self.data)
     def private_window(self,url=None,isolated=False):
+        from private_access import PrivateAccess
+        if not PrivateAccess(self).request():return
         from main import Browser
-        w=Browser(private=True,isolated=isolated);Features.windows.append(w);w.destroyed.connect(lambda:Features.windows.remove(w) if w in Features.windows else None);w.showFullScreen() if w.data['preferences'].get('start_fullscreen',True) else w.show()
+        w=Browser(private=True,isolated=isolated);w.data['preferences'].update(text_services=self.text_services_allowed(),online_translation=self.data['preferences'].get('online_translation',True));Features.windows.append(w);w.destroyed.connect(lambda:Features.windows.remove(w) if w in Features.windows else None);w.showFullScreen() if w.data['preferences'].get('start_fullscreen',True) else w.show()
         if isinstance(url,QUrl):w.navigate(url)
         return w
+    def text_services_allowed(self):
+        value=QApplication.instance().property('nova_text_services')
+        return self.data['preferences'].get('text_services',True) and value is not False
+    def set_text_services(self,enabled):
+        QApplication.instance().setProperty('nova_text_services',bool(enabled))
+        self.data['preferences']['text_services']=bool(enabled);self.save()
+        from main import Browser
+        for window in QApplication.topLevelWidgets():
+            if isinstance(window,Browser):
+                window.data['preferences']['text_services']=bool(enabled);window.preferenceChanged.emit('text_services',bool(enabled))
+                if not enabled and hasattr(window,'ai'):window.ai.stop()
+                if not window.private:window.save()
+    def set_online_suggestions(self,enabled):
+        self.data['preferences']['ai_suggestions']=bool(enabled);self.preferenceChanged.emit('ai_suggestions',bool(enabled));self.save()
+        if not enabled:self.ai.stop()
+    def change_private_code(self):
+        from private_access import PrivateAccess
+        PrivateAccess(self).request(changing=True)
+    def lock_private_window(self):
+        if not self.private or self._private_locked:return
+        from PySide6.QtWidgets import QFrame
+        self._private_locked=True;self.address_suggestions.completer.popup().hide();self.preview_timer.stop()
+        if getattr(self,'floating',None):self.floating.close()
+        if self.updater.toast:self.updater.toast.close()
+        self.download_panel.hide()
+        if getattr(self,'site_popup',None):self.site_popup.close()
+        if self.preview_popup:self.preview_popup.close();self.preview_popup=None
+        views=self.findChildren(QWebEngineView)+self.findChildren(MediaView)
+        for v in views:
+            if getattr(v,'_closing',False):continue
+            self.revoke_site(v);self.pause_view(v)
+            if isinstance(v,MediaView):v.send('lock')
+        self.tabs.hide();self.chrome.hide();self.capture_indicator.hide()
+        overlay=QFrame(self);overlay.setObjectName('privateLock');overlay.setStyleSheet('QFrame#privateLock{background:#090909}QLabel{color:#aaa;background:transparent;font-size:14px}QPushButton{background:#222;color:#eee;border:1px solid #3a3a3a;border-radius:9px;padding:10px 20px}')
+        layout=QVBoxLayout(overlay);layout.addStretch();logo=QLabel();logo.setPixmap(self.windowIcon().pixmap(104,72));logo.setAlignment(Qt.AlignmentFlag.AlignCenter);layout.addWidget(logo);title=QLabel('Navigation privée verrouillée');title.setAlignment(Qt.AlignmentFlag.AlignCenter);title.setStyleSheet('font-size:25px;font-weight:600;color:#eee;padding:12px');layout.addWidget(title);hint=QLabel('Caméra et micro coupés. Déverrouillez pour revenir.');hint.setAlignment(Qt.AlignmentFlag.AlignCenter);layout.addWidget(hint);row=QHBoxLayout();row.addStretch();unlock=QPushButton('Déverrouiller');unlock.clicked.connect(self.unlock_private_window);row.addWidget(unlock);close=QPushButton('Fermer la session');close.clicked.connect(self.close);row.addWidget(close);row.addStretch();layout.addLayout(row);layout.addStretch();overlay.setGeometry(self.rect());overlay.show();overlay.raise_();self._lock_overlay=overlay
+    def unlock_private_window(self):
+        from private_access import PrivateAccess
+        if not self.private or not self._private_locked:return
+        if not PrivateAccess(self).request():return
+        self._private_locked=False;self._lock_overlay.hide();self._lock_overlay.deleteLater();self._lock_overlay=None;self.tabs.show();self.chrome.show();self.bar.setVisible(not self.focus_mode)
+        v=self.current()
+        if v is not None:self.resume_view(v)
+        self.update_capture_indicator()
     def local_event(self,view,message):
         # RAM only, domain only. Private windows never write protection events.
         self.events.insert(0,(host_of(view.url().toString()) if view else '',message,time.strftime('%H:%M')));self.events=self.events[:100]
     def permit_navigation(self,url,view=None):
         value=url.toString();reason=suspicious(value)
+        if self._private_locked:return not bool(reason)
         if reason and host_of(value) not in self.trusted_once:
             self.local_event(view,reason)
             if NovaMessage.question(self,'Vérifiez cette adresse',reason+'\n\nContinuer vers ce domaine ?')!=NovaMessage.StandardButton.Yes:return False
@@ -85,6 +133,9 @@ class Features:
         if warning and NovaMessage.question(self,'Vérifier le téléchargement',name+'\n'+warning+'\nSource : '+host_of(source)+'\n\nEnregistrer quand même ?')!=NovaMessage.StandardButton.Yes:return False
         return True
     def translate_french(self,selection=''):
+        if self._private_locked:return
+        if not self.text_services_allowed() or not self.data['preferences'].get('online_translation',True):
+            self.updater.notify('Traduction en ligne désactivée','Vous pouvez l’activer dans Confidentialité > Envois de texte.',lambda:self.open_settings(2),action_text='Ouvrir les réglages');return
         url=self.current().url().toString()
         if self.private and NovaMessage.question(self,'Traduire en français','La traduction envoie le texte ou l’adresse de la page à Google Traduction. Continuer ?')!=NovaMessage.StandardButton.Yes:return
         if not selection and sensitive_link(url):
@@ -118,6 +169,7 @@ class Features:
         self.focus_mode=not self.focus_mode;self.bar.setVisible(not self.focus_mode)
         if self.focus_mode:self.updater.notify('Mode concentration','Ctrl + Maj + F pour retrouver la barre de navigation.')
     def toggle_presentation(self):
+        if self._private_locked:return
         self.presentation=not self.presentation
         if self.presentation:
             self.address_suggestions.completer.popup().hide();self.address_suggestions.completer.popup().setEnabled(False)
@@ -129,12 +181,14 @@ class Features:
             self.sync(force=True)
         self.top_tabs.update()
     def notes(self):
+        if self._private_locked:return
         d=NovaDialog(self,'Bloc-notes','Notes locales'+(' · effacées à la fermeture de la fenêtre privée' if self.private else ' · enregistrées sur cet appareil'))
         d.setMinimumWidth(470);edit=QPlainTextEdit();edit.setMinimumHeight(260);edit.setStyleSheet('background:#141414;color:#ddd;border:1px solid #333;border-radius:8px;padding:12px');edit.setPlainText(self.data.get('notes',''));d.body.addWidget(edit)
         timer=QTimer(d);timer.setSingleShot(True);timer.setInterval(400)
         def save():self.data['notes']=edit.toPlainText()[:100000];self.save()
         timer.timeout.connect(save);edit.textChanged.connect(lambda:timer.start());d.finished.connect(lambda *args:save());d.buttons('Fermer','Annuler');d.exec()
     def capture_page(self):
+        if self._private_locked:return
         view=self.current();d=NovaDialog(self,'Capturer la page','Choisissez la zone et le format.');mode=[]
         for title,key in [('Page visible · PNG','visible'),('Sélectionner une zone · PNG','region'),('Page complète · PDF','pdf')]:
             b=QPushButton(title);b.clicked.connect(lambda checked=False,k=key:(mode.append(k),d.accept()));d.body.addWidget(b,0,Qt.AlignmentFlag.AlignLeft)
@@ -155,6 +209,10 @@ class Features:
         if not pixmap.save(path,'PNG'):NovaMessage.information(self,'Capture','Impossible d’enregistrer cette capture.')
     def native_security(self,view,data):
         kind=data.get('type')
+        if self._private_locked:
+            if kind=='permission':view.send('permission-result',json.dumps({'id':str(data.get('id','')),'allow':False}));return
+            if kind=='download-request':view.send('download-answer',json.dumps({'id':str(data.get('id','')),'path':''}));return
+            if kind in ('translate','copy-link','screenshot'):return
         if kind=='dirty':view._dirty=bool(data.get('value'))
         elif kind=='capture-state':self.protection_message(view,dict(data,type='nova-capture-state'))
         elif kind=='translate':self.translate_french(str(data.get('value','')))
@@ -192,6 +250,7 @@ class Features:
                 view.setUrl(QUrl('http://'+url[len('https://'):]))
         self.updater.notify('HTTPS indisponible',host_of(url)+' · Nova ne revient pas automatiquement en HTTP.',retry,action_text='Voir les options',symbol='shield')
     def popup_request(self,view,request):
+        if self._private_locked:return
         now=time.monotonic()
         if not request.isUserInitiated() or now-getattr(view,'_last_popup',0)<2:
             self.local_event(view,'Fenêtre publicitaire ou ouverture répétée bloquée');return
@@ -216,6 +275,7 @@ class Features:
             elif isinstance(view,QWebEngineView):view.page().setAudioMuted(True);view.stop();view.setUrl(QUrl('about:blank'))
         view._capture_audio=False;view._capture_video=False;self.capture_indicator.hide();self.local_event(view,'Accès caméra et micro retirés'+(' · arrêt de la page' if emergency else ''))
     def ask_permission(self,view,origin,kind,deliver):
+        if self._private_locked:deliver(False);return
         if kind in ('ClipboardReadWrite','ClipboardRead'):
             self.local_event(view,'Lecture automatique du presse-papiers bloquée');deliver(False);return
         parsed=urlsplit(origin);origin=parsed.scheme+'://'+parsed.netloc
@@ -249,25 +309,39 @@ class Features:
     def build_site_panel(self):
         from PySide6.QtWidgets import QFrame
         from main import icon
-        view=self.current();url=view.url().toString();host=host_of(url)
-        d=QFrame(self,Qt.WindowType.Popup|Qt.WindowType.FramelessWindowHint);d.setFixedWidth(350);d.setStyleSheet('QFrame{background:#15131a;border:1px solid #35313d;border-radius:12px}QLabel{color:#b8b3c1;border:0;background:transparent;font-size:12px}QPushButton{background:transparent;border:0;border-radius:7px;color:#e1dce7;text-align:left;padding:10px 9px;font-size:12px}QPushButton:hover{background:#28232f}')
-        from ui import neutral_style
-        if self.private:d.setStyleSheet(neutral_style(d.styleSheet()))
-        layout=QVBoxLayout(d);layout.setContentsMargins(17,16,17,14);layout.setSpacing(4);heading=QLabel('Protection du site');heading.setStyleSheet('font-size:17px;font-weight:600;color:#eee;border:0');layout.addWidget(heading);domain=QLabel(host or 'Page Nova');domain.setTextFormat(Qt.TextFormat.PlainText);domain.setWordWrap(True);layout.addWidget(domain);layout.addSpacing(10)
-        status=QLabel('✓ Connexion HTTPS' if url.startswith('https://') else 'Page locale' if not host else 'Connexion HTTP non chiffrée');layout.addWidget(status);layout.addSpacing(10)
-        reason=suspicious(url)
+        from ui import monochrome
+        view=self.current();url=view.url().toString();host=host_of(url) if view.url().scheme() in ('http','https') else ''
+        d=QFrame(self,Qt.WindowType.Popup|Qt.WindowType.FramelessWindowHint);d.setObjectName('sitePanel');d.setFixedWidth(326);d.setStyleSheet('QFrame#sitePanel{background:#19191d;border:1px solid #3a3a41;border-radius:11px}QLabel{color:#a5a5af;border:0;background:transparent;font-size:12px}QPushButton{background:transparent;border:0;border-radius:6px;color:#dddddf;text-align:left;padding:10px 5px;font-size:12px}QPushButton:hover{background:#2b2b31}QPushButton#more{text-align:center;color:#b3b3be;font-size:11px}')
+        layout=QVBoxLayout(d);layout.setContentsMargins(17,16,17,10);layout.setSpacing(2);domain=QLabel(host or 'Page Nova');domain.setTextFormat(Qt.TextFormat.PlainText);domain.setWordWrap(True);domain.setStyleSheet('font-size:15px;font-weight:600;color:#ececef;padding-bottom:4px');layout.addWidget(domain)
+        status=QLabel(('Connexion chiffrée · HTTPS' if getattr(view,'_load_ok',None) is True else 'HTTPS · Connexion non confirmée') if url.startswith('https://') else 'Page interne de Nova' if not host else 'Connexion non chiffrée · HTTP');layout.addWidget(status);layout.addSpacing(10)
+        def separator():
+            line=QFrame();line.setFixedHeight(1);line.setStyleSheet('background:#34343b;border:0');layout.addWidget(line);layout.addSpacing(4)
+        separator()
+        reason=suspicious(url) if host else ''
         if reason:
             warning=QLabel(reason);warning.setWordWrap(True);layout.addWidget(warning)
-        def action(title,symbol,cb):
-            b=QPushButton(title);b.setCursor(Qt.CursorShape.ArrowCursor);b.setIcon(icon(symbol,18));b.setIconSize(QSize(17,17));b.clicked.connect(lambda:(d.close(),cb()));layout.addWidget(b)
-        action('Autorisations temporaires','shield',lambda:self.permissions_panel(view))
+        def action(title,symbol,cb,arrow=False):
+            button=QPushButton();button.setAccessibleName(title);button.setCursor(Qt.CursorShape.ArrowCursor);button.setFixedHeight(42);row=QHBoxLayout(button);row.setContentsMargins(6,6,5,6);row.setSpacing(12)
+            image=QLabel();image.setPixmap(monochrome(icon(symbol,18),18).pixmap(18,18));image.setFixedWidth(20);row.addWidget(image);label=QLabel(title);label.setStyleSheet('font-size:12px;color:#dddddf');row.addWidget(label,1)
+            if arrow:chevron=QLabel('›');chevron.setStyleSheet('color:#9999a4;font-size:19px');row.addWidget(chevron)
+            for child in button.findChildren(QLabel):child.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+            button.clicked.connect(lambda:(d.close(),cb()));layout.addWidget(button)
+        action('Autorisations','shield',lambda:self.permissions_panel(view),True)
         capture='Caméra et micro · En cours' if getattr(view,'_capture_audio',False) or getattr(view,'_capture_video',False) else 'Caméra et micro · Inactifs'
-        action(capture,'video',lambda:self.revoke_site(view))
-        action('Effacer les données du site','close',lambda:self.clear_site(view))
-        action('Ouvrir en session isolée','plus',lambda:self.private_window(QUrl(url),True))
-        action('Journal de protection','shield',self.protection_log);layout.addSpacing(5)
-        action('Arrêter l’activité du site','close',lambda:self.revoke_site(view,True));d.adjustSize();return d
+        action(capture,'video',lambda:self.permissions_panel(view))
+        action('Données du site','settings',lambda:self.clear_site(view),True);layout.addSpacing(5);separator()
+        more=QPushButton('Plus d’options');more.setObjectName('more');layout.addWidget(more)
+        def options():
+            menu=QMenu(d);menu.setStyleSheet('QMenu{background:#1b1b20;color:#dcdce2;border:1px solid #3c3c44;border-radius:8px;padding:5px}QMenu::item{padding:9px 12px;border-radius:5px}QMenu::item:selected{background:#303037}')
+            def item(title,callback):menu.addAction(title).triggered.connect(lambda:(d.close(),callback()))
+            item('Confidentialité et envois de texte',lambda:self.open_settings(2))
+            item('Ouvrir dans une session isolée',lambda:self.private_window(QUrl(url),True))
+            item('Journal de protection',self.protection_log)
+            if self.private:item('À propos des vérifications robot',lambda:NovaMessage.information(self,'Vérifications des sites','Les cookies restent dans cette fenêtre jusqu’à sa fermeture. Une nouvelle session privée n’a pas les cookies de confiance précédents : les sites peuvent demander un CAPTCHA. Nova ne contourne pas ces vérifications.'))
+            menu.addSeparator();item('Arrêter l’activité du site',lambda:self.revoke_site(view,True));menu.exec(more.mapToGlobal(more.rect().bottomLeft()))
+        more.clicked.connect(options);d.adjustSize();return d
     def site_panel(self):
+        if self._private_locked:return
         self.site_popup=self.build_site_panel();anchor=self.bar.widgetForAction(next(a for a in self.bar.actions() if a.text()=='Protection de ce site'));self.site_popup.move(anchor.mapToGlobal(anchor.rect().bottomLeft()));self.site_popup.show()
     def permissions_panel(self,view):
         host=host_of(view.url().toString());d=NovaDialog(self,'Autorisations',host);now=time.monotonic()
@@ -288,8 +362,10 @@ class Features:
             self.view_script(view,"(()=>{localStorage.clear();sessionStorage.clear();caches.keys().then(k=>Promise.all(k.map(x=>caches.delete(x))));indexedDB.databases?.().then(d=>d.forEach(x=>indexedDB.deleteDatabase(x.name)));navigator.serviceWorker?.getRegistrations().then(r=>r.forEach(x=>x.unregister()));})()")
         self.local_event(view,'Données du site effacées');self.updater.notify('Données du site effacées',host+' · rechargez la page pour repartir.')
     def protection_log(self):
+        if self._private_locked:return
         d=NovaDialog(self,'Journal de protection','Événements de cette fenêtre · mémoire uniquement');edit=QPlainTextEdit();edit.setReadOnly(True);edit.setPlainText('\n\n'.join(t+' · '+host+'\n'+message for host,message,t in self.events) or 'Aucun événement.');edit.setMinimumSize(460,280);d.body.addWidget(edit);d.buttons('Fermer','Annuler');d.exec()
     def resource_panel(self):
+        if self._private_locked:return
         d=NovaDialog(self,'Activité des onglets','État des onglets et mémoire du processus de rendu.');d.setMinimumWidth(620);table=QTableWidget(self.tabs.count(),4);table.setHorizontalHeaderLabels(['Onglet','État','Mémoire','Action']);table.horizontalHeader().setSectionResizeMode(0,QHeaderView.ResizeMode.Stretch);table.setMinimumHeight(280)
         from resources import renderer_memory
         memory=renderer_memory(self)
@@ -307,7 +383,7 @@ class Features:
         d.body.addWidget(table);d.body.addWidget(QLabel('Les processus peuvent être partagés entre onglets. La mémoire n’est pas additionnable.'));d.buttons('Fermer','Annuler');d.exec()
     def show_tab_preview(self):
         i=self.hover_index
-        if self.presentation or not 0<=i<self.tabs.count() or i==self.tabs.currentIndex():return
+        if self._private_locked or self.presentation or not 0<=i<self.tabs.count() or i==self.tabs.currentIndex():return
         view=self.top_tabs.tabData(i);p=QLabel(self,Qt.WindowType.ToolTip);p.setStyleSheet('background:#171717;color:#ddd;border:1px solid #333;border-radius:10px;padding:12px;font-size:12px');p.setTextFormat(Qt.TextFormat.PlainText)
         preview=getattr(view,'_preview',None)
         if preview is not None and not preview.isNull():p.setPixmap(preview);p.setToolTip(view.title())

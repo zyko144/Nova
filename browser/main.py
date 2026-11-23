@@ -111,6 +111,7 @@ from security import upgrade_http,suspicious
 
 class Browser(Features,QMainWindow):
     searchStatus=Signal(str)
+    preferenceChanged=Signal(str,object)
     def __init__(self,private=False,isolated=False):
         super().__init__()
         self.private=private;self.isolated=isolated;self._closing_window=False
@@ -244,6 +245,7 @@ class Browser(Features,QMainWindow):
         view=self.tabs.currentWidget();floating=getattr(self,'floating',None)
         return floating.view if floating and view is floating.placeholder else view
     def floating_player(self):
+        if self._private_locked:return
         if getattr(self,'floating',None):self.floating.raise_();return
         view=self.current()
         if not isinstance(view,(MediaView,QWebEngineView)):return
@@ -531,6 +533,7 @@ class Browser(Features,QMainWindow):
         QMessageBox.information(self,'Optimisation terminée',f'Cache classique vidé et {count} onglet(s) classique(s) inactif(s) mis en veille. Les lecteurs vidéo et connexions sont conservés.')
     def toggle_maximized(self): self.showNormal() if self.isMaximized() else self.showMaximized()
     def resizeEvent(self,event):
+        if getattr(self,'_lock_overlay',None):self._lock_overlay.setGeometry(self.rect())
         super().resizeEvent(event)
         if hasattr(self,'top_tabs'):self.top_tabs.updateGeometry()
         if hasattr(self,'updater') and self.updater.toast:
@@ -649,6 +652,7 @@ class Browser(Features,QMainWindow):
             else: QMessageBox.information(self,'Bloqueur de publicités','uBlock Origin Lite : '+view.adblock_name)
         else: QMessageBox.information(self,'Bloqueur de publicités','uBlock Origin Lite est intégré aux onglets du moteur vidéo compatible. Utilisez le bouton vidéo pour ouvrir ce site avec le bloqueur, puis l’icône Extensions pour ses réglages.')
     def downloads_menu(self):
+        if self._private_locked:return
         self.download_panel.show();self.download_panel.raise_();self.download_panel.activateWindow()
     def new_tab(self, url=None):
         view=NovaWebView(self); page=Page(self.profile,self);page.setBackgroundColor(QColor('#080808' if self.private else '#07060e')); view.setPage(page)
@@ -786,6 +790,7 @@ class Browser(Features,QMainWindow):
     def page_url_changed(self,view):
         parsed=urlsplit(view.url().toString());origin=parsed.scheme+'://'+parsed.netloc
         previous=getattr(view,'_permission_origin','')
+        if previous!=origin:view._load_ok=None
         if previous and previous!=origin:
             self.grants={k:v for k,v in self.grants.items() if not (k[0]==previous and v[1] is view)}
             self.view_script(view,'window.__novaStopCapture?.()')
@@ -809,6 +814,7 @@ class Browser(Features,QMainWindow):
         forward=(view.can_forward if isinstance(view,MediaView) else view.history().canGoForward() or getattr(view,'forward_media',None) is not None if isinstance(view,QWebEngineView) else False)
         self.bar.actions()[0].setEnabled(back);self.bar.actions()[1].setEnabled(forward)
     def loaded(self,view,ok):
+        view._load_ok=bool(ok)
         if not ok:
             self.statusBar().showMessage('Chargement impossible ou interrompu.',6000)
             if isinstance(view,QWebEngineView):self.http_failure(view,view.url().toString())
@@ -832,6 +838,7 @@ class Browser(Features,QMainWindow):
             self.data['bookmarks'].append({'title':self.current().title(),'url':url}); self.save()
         self.statusBar().showMessage('Favori enregistré',3000)
     def download(self,item):
+        if self._private_locked:item.cancel();return
         path,_=QFileDialog.getSaveFileName(self,'Enregistrer le téléchargement',str(Path.home()/'Downloads'/Path(item.downloadFileName()).name))
         if not path or not self.allow_download(Path(path).name,item.url().toString()): item.cancel(); return
         item.setDownloadDirectory(str(Path(path).parent)); item.setDownloadFileName(Path(path).name); item.accept()
@@ -841,6 +848,7 @@ class Browser(Features,QMainWindow):
     def menu(self):
         menu=QMenu(self)
         menu.addAction('Nouvelle fenêtre privée · Ctrl+Maj+N').triggered.connect(self.private_window)
+        if self.private:menu.addAction('Verrouiller la fenêtre privée').triggered.connect(self.lock_private_window)
         tools=menu.addMenu('Outils de page')
         for title,cb in [('Traduire en français',self.translate_french),('Capture de la page',self.capture_page),('Bloc-notes',self.notes),('Couper / réactiver le son',self.toggle_mute),('Mode concentration',self.toggle_focus),('Mode présentation privé',self.toggle_presentation),('Activité des onglets',self.resource_panel),('Protection de ce site',self.site_panel)]:tools.addAction(title).triggered.connect(cb)
         menu.addAction(icon('settings'),'Paramètres Nova').triggered.connect(self.open_settings)

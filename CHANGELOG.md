@@ -1,3 +1,11 @@
+## 4.1.0 — Confidentialité et accès privé
+
+- Réglage général « Services de texte en ligne » et contrôles séparés pour les suggestions et la traduction. Arrêt des requêtes de suggestions en cours à la désactivation ; recherches validées et messages des sites inchangés.
+- Paramètres réorganisés en lignes compactes, avec descriptions et interrupteurs synchronisés. Panneau de protection simplifié avec les options avancées dans un menu secondaire.
+- Code privé de 6 à 12 chiffres, confirmation à la création et code de secours affiché une seule fois. Empreintes scrypt protégées par Windows DPAPI, limitation des essais et récupération via Windows Hello ou code de secours.
+- Verrouillage manuel d’une fenêtre privée : contenu, lecteur flottant, aperçus et téléchargements masqués, autorisations temporaires retirées ; capture depuis Nova bloquée jusqu’au déverrouillage.
+- Les CAPTCHA légitimes des sites restent actifs. Les cookies privés restent en mémoire pendant la session et disparaissent à la fermeture.
+
 ## 4.0.0 — Nova
 
 - Navigation privée dans une fenêtre noire et grise, vrai logo Nova en argent, profil séparé en mémoire, sans historique, recherches récentes, coffre, compte Nova ni suggestions en ligne. Nettoyage des fichiers temporaires à la fermeture.

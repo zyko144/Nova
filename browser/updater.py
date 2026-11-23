@@ -60,6 +60,7 @@ class Updater(QObject):
     def focused(self,state):
         if state==Qt.ApplicationState.ApplicationActive and time.monotonic()-self.checked_at>60:self.check()
     def notify(self,title,message,callback=None,action_text='Voir la mise à jour',symbol='download'):
+        if getattr(self.browser,'_private_locked',False):return
         if self.browser.presentation and title!='Mode présentation':return
         if self.toast:
             try:self.toast.close()

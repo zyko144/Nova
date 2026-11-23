@@ -195,3 +195,35 @@ Paramètres > Compte et démarrage : lancement à la connexion Windows et plein 
 Le nom de stockage NovaBrowser reste stable pour conserver les profils existants.
 Une copie de compatibilité de l’exécutable demeure dans l’archive GitHub pour les
 anciennes versions de l’assistant de mise à jour ; utiliser Nova.exe.
+
+## Contrôles de confidentialité et code privé (4.1)
+
+Paramètres > Confidentialité > Envois de texte permet de désactiver tous les
+services de texte facultatifs de Nova, ou seulement les suggestions / la traduction.
+Le réglage général coupe les requêtes futures et annule les suggestions en cours
+au mieux ; il ne peut pas retirer une saisie déjà reçue par le fournisseur.
+Les recherches validées, les connexions et les messages envoyés aux sites restent
+fonctionnels. Les suggestions en ligne sont toujours désactivées en privé.
+
+À la première ouverture privée, Nova demande un code de 6 à 12 chiffres à saisir
+deux fois et affiche un code de secours aléatoire. Seuls des dérivés scrypt avec
+sels distincts sont conservés, dans un fichier protégé par Windows DPAPI. Les
+échecs sont limités et le délai est conservé entre les redémarrages. « Code oublié »
+permet de remplacer le code après vérification Windows Hello ou du code de secours.
+Le nouveau code invalide l’ancien code et l’ancien secours. Aucun code ne doit
+être communiqué dans le chat ni envoyé à Nova : tout ce parcours est local.
+
+Le verrouillage manuel masque cette fenêtre et son lecteur flottant et empêche
+les captures depuis Nova ; il ne ferme pas la session. Le code protège l’accès dans
+l’application, ce n’est ni une passkey FIDO ni une frontière de sécurité contre une
+personne contrôlant votre compte Windows ou une version modifiée du navigateur.
+Pour protéger l’ensemble du PC, utiliser le verrouillage de session Windows.
+Sans le code, le secours ou Windows Hello disponible, Nova n’offre pas de bouton
+permettant de contourner la vérification. Une session privée déjà fermée n’est pas
+récupérable. La configuration du code est conservée ; pas l’historique privé.
+
+Des CAPTCHA peuvent rester présents : Nova ne les résout pas et ne contourne pas
+les contrôles des sites. Les cookies de session sont conservés en mémoire jusqu’à
+la fermeture de la fenêtre privée, sans importer les cookies de navigation normale.
+Les nouveaux visuels de référence ont été générés avec imagegen, puis comparés
+aux widgets réellement rendus ; les images ne remplacent pas les contrôles natifs.

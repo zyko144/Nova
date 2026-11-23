@@ -18,7 +18,7 @@ static class Program
                 try{
                     var available=await Windows.Security.Credentials.UI.UserConsentVerifier.CheckAvailabilityAsync();
                     if(available==Windows.Security.Credentials.UI.UserConsentVerifierAvailability.Available){
-                        var result=await Windows.Security.Credentials.UI.UserConsentVerifierInterop.RequestVerificationForWindowAsync(form.Handle,"Déverrouiller le coffre Nova");
+                        var result=await Windows.Security.Credentials.UI.UserConsentVerifierInterop.RequestVerificationForWindowAsync(form.Handle,args.Length>2 && args[2]=="private"?"Accéder à la navigation privée Nova":"Déverrouiller le coffre Nova");
                         verified=result==Windows.Security.Credentials.UI.UserConsentVerificationResult.Verified;
                     }
                 }catch{}
@@ -61,6 +61,8 @@ sealed class MediaWindow : Form
     uint parentThread,ownThread;
     bool inputAttached;
     bool suspendRequested;
+    bool contentLocked;
+    readonly List<Form> loginPopups=new();
     readonly List<CoreWebView2Frame> frames = new();
     const string PauseScript="(()=>{const playing=[...document.querySelectorAll('video,audio')].filter(e=>!e.paused&&!e.ended);window.__novaPausedMedia=[...new Set([...(window.__novaPausedMedia||[]).filter(e=>e.isConnected),...playing])];playing.forEach(e=>e.pause());return playing.length;})()";
     const string ResumeScript="(()=>{const media=window.__novaPausedMedia||[];window.__novaPausedMedia=[];media.filter(e=>e.isConnected).forEach(e=>{try{e.play()?.catch(()=>{});}catch{}});})()";
@@ -113,6 +115,11 @@ sealed class MediaWindow : Form
         }
         base.WndProc(ref message);
     }
+    void LockContent()
+    {
+        contentLocked=true;web.Visible=false;
+        foreach(var popup in loginPopups.ToArray()){if(!popup.IsDisposed)popup.Hide();}
+    }
     async Task SuspendMedia()
     {
         suspendRequested=true;
@@ -129,7 +136,8 @@ sealed class MediaWindow : Form
     }
     async Task ResumeMedia(bool focus)
     {
-        suspendRequested=false;
+        suspendRequested=false;bool wasLocked=contentLocked;contentLocked=false;web.Visible=true;
+        if(wasLocked)foreach(var popup in loginPopups.ToArray()){if(!popup.IsDisposed)popup.Show(this);}
         sizeTimer.Interval=100;
         try {web.CoreWebView2.Resume();if(focus)web.Focus();await web.CoreWebView2.ExecuteScriptAsync(ResumeScript);foreach(var frame in frames.ToArray()){try{await frame.ExecuteScriptAsync(ResumeScript);}catch { }}}catch { }
     }
@@ -305,6 +313,7 @@ sealed class MediaWindow : Form
                     else if (cmd == "reload") web.Reload();
                     else if (cmd == "focus") web.Focus();
                     else if (cmd == "reparent" && long.TryParse(value,out long handle)) {parent=new IntPtr(handle);SetParent(Handle,parent);}
+                    else if(cmd=="lock")LockContent();
                     else if (cmd == "suspend") _=SuspendMedia();
                     else if (cmd == "resume") _=ResumeMedia(value=="focus");
                     else if (cmd == "autofill") _=FillForm(value);
@@ -336,6 +345,7 @@ sealed class MediaWindow : Form
             await web.ExecuteScriptAsync("document.body.innerHTML='<input id=nova>';document.getElementById('nova').value='ready';document.title='Nova self test';");
             var result=await web.ExecuteScriptAsync("document.getElementById('nova').value");
             if(result!="\"ready\"")throw new InvalidOperationException("Document unavailable");
+            LockContent();if(web.Visible)throw new InvalidOperationException("Locked content still visible");await ResumeMedia(false);if(!web.Visible||contentLocked)throw new InvalidOperationException("Unlock failed");
             using var stream=new MemoryStream();await web.CoreWebView2.CapturePreviewAsync(CoreWebView2CapturePreviewImageFormat.Png,stream);
             if(stream.Length<100)throw new InvalidOperationException("Capture failed");
             Send(new {type="self-test",ok=true,privateMode});
@@ -367,7 +377,7 @@ sealed class MediaWindow : Form
             child.CoreWebView2.PermissionRequested+=(_,e)=>{e.State=CoreWebView2PermissionState.Deny;e.SavesInProfile=false;};
             child.CoreWebView2.NewWindowRequested+=(_,e)=>e.Handled=true;
             child.CoreWebView2.WindowCloseRequested+=(_,_)=>popup.Close();
-            request.NewWindow=child.CoreWebView2;popup.FormClosed+=(_,_)=>child.Dispose();popup.Show(this);
+            request.NewWindow=child.CoreWebView2;loginPopups.Add(popup);popup.FormClosed+=(_,_)=>{loginPopups.Remove(popup);child.Dispose();};popup.Owner=this;if(!contentLocked)popup.Show(this);
         }catch{popup?.Dispose();Send(new {type="security",message="La fenêtre de connexion n’a pas pu s’ouvrir"});}
         finally{deferral.Complete();}
     }

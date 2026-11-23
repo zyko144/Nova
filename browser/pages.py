@@ -1,6 +1,6 @@
 import json
 from datetime import datetime
-from PySide6.QtCore import Qt,QUrl,QByteArray,Signal,QTimer,QSize,QRectF,QBuffer,QIODevice
+from PySide6.QtCore import Qt,QUrl,QByteArray,Signal,QTimer,QObject,QSize,QRectF,QBuffer,QIODevice
 from PySide6.QtGui import QPainter,QColor,QFont,QPixmap,QImageReader,QPainterPath
 from PySide6.QtNetwork import QNetworkAccessManager,QNetworkRequest
 from PySide6.QtWidgets import (QWidget,QFrame,QLabel,QPushButton,QLineEdit,QVBoxLayout,QHBoxLayout,
@@ -36,9 +36,46 @@ def setting_action(layout,title,description,button_text,callback,primary=False):
     button.clicked.connect(callback);row.addWidget(button,0,Qt.AlignmentFlag.AlignVCenter)
     layout.addLayout(row);return button
 
+def section(layout,title,description=''):
+    block=QWidget();content=QVBoxLayout(block);content.setContentsMargins(0,0,0,0);content.setSpacing(10)
+    label=text(title,'sectionTitle');label.setStyleSheet('font-size:17px;font-weight:600;color:#e4e4e8;padding-top:4px');content.addWidget(label)
+    if description:
+        hint=text(description);hint.setStyleSheet('font-size:12px;color:#96969f');content.addWidget(hint)
+    frame=QFrame();frame.setObjectName('settingGroup');rows=QVBoxLayout(frame);rows.setContentsMargins(0,0,0,0);rows.setSpacing(0);content.addWidget(frame);layout.addWidget(block);return rows
+
+def preference_row(layout,title,description,control):
+    control.setAccessibleName(title);control.setAccessibleDescription(description)
+    row=QWidget();row.setObjectName('preferenceRow');h=QHBoxLayout(row);h.setContentsMargins(16,13,16,13);h.setSpacing(22);labels=QVBoxLayout();labels.setSpacing(4);name=text(title);name.setStyleSheet('color:#e1e1e6;font-size:13px;font-weight:500');labels.addWidget(name)
+    if description:
+        hint=text(description);hint.setStyleSheet('color:#9797a1;font-size:12px');labels.addWidget(hint)
+    h.addLayout(labels,1);h.addWidget(control,0,Qt.AlignmentFlag.AlignVCenter);layout.addWidget(row);return row
+
+def connect_owned(signal,callback,owner):
+    connection=signal.connect(callback)
+    def detach(*args):
+        try:
+            if connection:QObject.disconnect(connection)
+        except (RuntimeError,TypeError):pass
+    owner.destroyed.connect(detach)
+
+def bind_preference(browser,control,key,default=False,callback=None):
+    control.setProperty('preferenceKey',key);control.setChecked(browser.data['preferences'].get(key,default))
+    def changed(value):
+        browser.data['preferences'][key]=value;browser.save();browser.preferenceChanged.emit(key,value)
+        if callback:callback(value)
+    def refresh(name,value):
+        if name==key:
+            blocked=control.blockSignals(True);control.setChecked(bool(value));control.blockSignals(blocked)
+    control.toggled.connect(changed);connect_owned(browser.preferenceChanged,refresh,control)
+    if key=='ai_suggestions':
+        def available(*args):
+            allowed=not browser.private and browser.text_services_allowed();control.setEnabled(allowed);control.setToolTip('Toujours désactivé en navigation privée.' if browser.private else 'Désactivé par le réglage général de confidentialité.' if not allowed else '')
+        connect_owned(browser.preferenceChanged,lambda name,value:available() if name=='text_services' else None,control);available()
+    return control
+
 class InternalPage(QWidget):
     def __init__(self,path,title,browser):
-        super().__init__();self.path=path;self._title=title;self.browser=browser;self.setObjectName('novaPage');self.setStyleSheet(PAGE_STYLE+'''QLabel{font-size:12px}QLabel#pageTitle{font-size:24px}QLabel#cardTitle{font-size:16px}QPushButton{padding:8px 14px;font-size:12px;border-radius:9px}QLineEdit,QComboBox{padding:9px 12px;font-size:12px}QListWidget::item{padding:6px 10px;margin:2px 0;border-radius:10px}''')
+        super().__init__();self.path=path;self._title=title;self.browser=browser;self.setObjectName('novaPage');self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground,True);self.setStyleSheet(PAGE_STYLE+'''QLabel{font-size:12px}QLabel#pageTitle{font-size:24px}QLabel#cardTitle{font-size:16px}QPushButton{padding:8px 14px;font-size:12px;border-radius:9px}QLineEdit,QComboBox{padding:9px 12px;font-size:12px}QListWidget::item{padding:6px 10px;margin:2px 0;border-radius:10px}''')
     def url(self):return QUrl('nova://'+self.path)
     def title(self):return self._title
     def back(self):self.browser.home()
@@ -48,11 +85,11 @@ class InternalPage(QWidget):
 class Toggle(QCheckBox):
     def sizeHint(self):return QSize(340,32)
     def paintEvent(self,event):
-        painter=QPainter(self);painter.setRenderHint(QPainter.RenderHint.Antialiasing);painter.setFont(QFont('Segoe UI',10));painter.setPen(QColor('#cfc4dc'))
+        painter=QPainter(self);painter.setOpacity(1 if self.isEnabled() else .4);painter.setRenderHint(QPainter.RenderHint.Antialiasing);painter.setFont(QFont('Segoe UI',10));painter.setPen(QColor('#ccccd1'))
         painter.drawText(self.rect().adjusted(0,0,-58,0),Qt.AlignmentFlag.AlignVCenter|Qt.AlignmentFlag.AlignLeft,self.text())
         x=self.width()-40;y=(self.height()-20)/2
-        painter.setPen(Qt.PenStyle.NoPen);painter.setBrush(QColor('#8c2be7' if self.isChecked() else '#302a3b'));painter.drawRoundedRect(QRectF(x,y,38,20),10,10)
-        painter.setBrush(QColor('#f3eaff' if self.isChecked() else '#a39bb4'));painter.drawEllipse(QRectF(x+(20 if self.isChecked() else 3),y+3,14,14))
+        painter.setPen(Qt.PenStyle.NoPen);painter.setBrush(QColor(('#b8b8bd' if getattr(self.window(),'private',False) else '#9271d7') if self.isChecked() else '#3a3a40'));painter.drawRoundedRect(QRectF(x,y,38,20),10,10)
+        painter.setBrush(QColor('#f4f4f5' if self.isChecked() else '#b5b5bc'));painter.drawEllipse(QRectF(x+(20 if self.isChecked() else 3),y+3,14,14))
     def hitButton(self,pos):return self.rect().contains(pos)
 
 class SyncClient(QWidget):
@@ -226,25 +263,27 @@ class AccountPage(InternalPage):
         else:self.avatar.setText('');self.avatar.setPixmap(client.avatar.scaled(56,56,Qt.AspectRatioMode.KeepAspectRatio,Qt.TransformationMode.SmoothTransformation))
 
 class SettingsPage(InternalPage):
-    sections=[('Apparence','settings'),('Onglets','plus'),('Confidentialité et sécurité','vpn'),('VPN','vpn'),('Téléchargements','download'),('Extensions et publicités','extensions'),('Moteur de recherche','search'),('Optimiser le navigateur','video'),('Compte et démarrage','profile'),('À propos','home'),('Identifiants et saisie','profile')]
+    sections=[('Apparence','settings'),('Onglets','plus'),('Confidentialité','vpn'),('VPN','vpn'),('Téléchargements','download'),('Extensions et publicités','extensions'),('Recherche','search'),('Performances','video'),('Compte et démarrage','profile'),('À propos','home'),('Identifiants et saisie','profile')]
     def __init__(self,browser):
         super().__init__('settings','Paramètres',browser)
+        self.setStyleSheet(self.styleSheet()+SETTINGS_STYLE)
         root=QHBoxLayout(self);root.setContentsMargins(0,0,0,0);root.setSpacing(0)
         sidebar=QFrame();sidebar.setObjectName('sidebar');sidebar.setFixedWidth(245);side=QVBoxLayout(sidebar);side.setContentsMargins(18,22,18,20)
         brand=QHBoxLayout();logo=QLabel();logo.setPixmap(browser.windowIcon().pixmap(52,52));brand.addWidget(logo);brand.addWidget(text('Nova','brand'));side.addLayout(brand);side.addSpacing(20)
-        self.nav=QListWidget();self.nav.setIconSize(__import__('PySide6.QtCore',fromlist=['QSize']).QSize(23,23))
+        self.nav=QListWidget();self.nav.setIconSize(QSize(19,19))
         for name,ico in self.sections:
-            item=QListWidgetItem(generated_icon(ico,26),'Compte Google' if name=='Compte et synchronisation' else name);item.setToolTip(name);item.setSizeHint(QSize(200,40));self.nav.addItem(item)
+            item=QListWidgetItem(generated_icon(ico,26),'Compte Google' if name=='Compte et synchronisation' else name);item.setToolTip(name);item.setSizeHint(QSize(200,36));self.nav.addItem(item)
         self.nav.item(3).setHidden(True)
         self.nav.setStyleSheet('QListWidget{padding:0;border:0;background:transparent}QListWidget::item{margin:3px 6px 3px 1px;padding:6px 9px;border:1px solid transparent;border-radius:10px}QListWidget::item:selected{background:#241337;border:1px solid #7340a3;color:#eee5f7}')
         side.addWidget(self.nav);side.addWidget(text('Nova · Version de développement'));root.addWidget(sidebar)
-        content=QWidget();self.content=content;content.setFixedWidth(min(1120,max(0,browser.width()-245)));col=QVBoxLayout(content);col.setContentsMargins(30,26,30,25);col.setSpacing(20)
+        content=QWidget();self.content=content;content.setFixedWidth(min(1020,max(0,browser.width()-245)));col=QVBoxLayout(content);col.setContentsMargins(30,26,30,25);col.setSpacing(20)
         header=QHBoxLayout();titles=QVBoxLayout();titleLabel=text('Paramètres','pageTitle');titleLabel.setMinimumWidth(260);titles.addWidget(titleLabel);titles.addWidget(text('Personnalisez votre navigateur.'));header.addLayout(titles);header.addStretch()
         search=QLineEdit();search.setPlaceholderText('Rechercher un réglage…');search.setMaximumWidth(290);search.setMinimumWidth(160);header.addWidget(search);col.addLayout(header)
         self.stack=QStackedWidget();col.addWidget(self.stack);root.addWidget(content);root.addStretch(1)
         for index,(name,_) in enumerate(self.sections):
-            scroll=QScrollArea();scroll.setWidgetResizable(True);body=QWidget();body.setStyleSheet('background:transparent');layout=QVBoxLayout(body);layout.setContentsMargins(0,0,4,0);layout.setSpacing(22)
+            scroll=QScrollArea();scroll.setWidgetResizable(True);body=QWidget();body.setObjectName('settingsBody');body.setStyleSheet('QWidget#settingsBody{background:transparent}');layout=QVBoxLayout(body);layout.setContentsMargins(0,0,4,0);layout.setSpacing(16 if index==2 else 22)
             self.build_section(index,layout);layout.addStretch();scroll.setWidget(body);self.stack.addWidget(scroll)
+        self.nav.currentRowChanged.connect(lambda i:titleLabel.setText(self.sections[i][0]) if 0<=i<len(self.sections) else None)
         self.nav.currentRowChanged.connect(self.stack.setCurrentIndex);self.nav.setCurrentRow(0)
         search.textChanged.connect(lambda value:self.filter(value))
     def filter(self,value):
@@ -255,14 +294,10 @@ class SettingsPage(InternalPage):
         if first is not None:self.nav.setCurrentRow(first)
     def resizeEvent(self,event):
         super().resizeEvent(event)
-        if hasattr(self,'content'):self.content.setFixedWidth(min(1120,max(0,self.width()-245)))
+        if hasattr(self,'content'):self.content.setFixedWidth(min(1020,max(0,self.width()-245)))
         if hasattr(self,'appearance_preview'):self.appearance_preview.setVisible(self.width()>=1050)
     def toggle(self,layout,label,key,default=False,callback=None):
-        button=Toggle(label);button.setFixedHeight(33);button.setChecked(self.browser.data.get('preferences',{}).get(key,default));layout.addWidget(button)
-        def changed(value):
-            self.browser.data.setdefault('preferences',{})[key]=value;self.browser.save()
-            if callback:callback(value)
-        button.toggled.connect(changed);return button
+        button=Toggle(label);button.setFixedHeight(33);layout.addWidget(button);return bind_preference(self.browser,button,key,default,callback)
     def build_section(self,index,layout):
         b=self.browser
         if index==0:
@@ -291,15 +326,24 @@ class SettingsPage(InternalPage):
             action(c,'Ouvrir un nouvel onglet',b.new_tab)
             action(c,'Mettre en veille les onglets classiques inactifs',b.sleep_tabs)
         elif index==2:
-            frame,c=card('Confidentialité et sécurité','Les certificats HTTPS et la sandbox restent activés.');layout.addWidget(frame)
-            self.toggle(c,'Activer uBlock Origin Lite dans le moteur vidéo','adblock',True,b.set_adblock)
-            action(c,'Nouvelle fenêtre privée',b.private_window)
-            action(c,'Protection de ce site',b.site_panel)
-            action(c,'Journal de protection',b.protection_log)
-            self.toggle(c,'Limiter les adresses réseau exposées par WebRTC (moteur classique)','webrtc_public',True,b.apply_web_preferences)
-            frame,c=card('Données de navigation');layout.addWidget(frame)
-            setting_action(c,'Historique et cache','Supprimer les pages visitées et les fichiers temporaires.','Effacer',b.clear)
-            setting_action(c,'Cookies et connexions','Déconnecter les sites du profil classique.','Gérer les cookies',b.clear_cookies)
+            rows=section(layout,'Envois de texte','Contrôlez les services facultatifs qui reçoivent votre saisie.')
+            def switch(key,default,callback=None):
+                t=Toggle('');t.setFixedSize(42,24);return bind_preference(b,t,key,default,callback)
+            master=switch('text_services',True,b.set_text_services);ai=switch('ai_suggestions',True,b.set_online_suggestions);translation=switch('online_translation',True)
+            preference_row(rows,'Services de texte en ligne','Désactive les suggestions distantes et la traduction de Nova.',master)
+            preference_row(rows,'Suggestions en ligne','Le texte saisi est envoyé au service Nova pour proposer des recherches.',ai)
+            preference_row(rows,'Traduction en ligne','Le texte ou l’adresse est transmis à Google Traduction uniquement à votre demande.',translation)
+            def enabled(*args):ai.setEnabled(master.isChecked() and not b.private);translation.setEnabled(master.isChecked())
+            master.toggled.connect(enabled);connect_owned(b.preferenceChanged,lambda name,value:enabled() if name=='text_services' else None,master);enabled()
+            hint=text('Ces contrôles concernent les services Nova. Les recherches validées, les connexions et les échanges des sites restent actifs. Les suggestions en ligne sont désactivées en privé.');hint.setStyleSheet('color:#8d8d98;font-size:11px');layout.addWidget(hint)
+            rows=section(layout,'Navigation privée','Une session séparée, avec un code d’accès conservé uniquement sur cet appareil.')
+            change=QPushButton('Créer / modifier');change.clicked.connect(b.change_private_code);preference_row(rows,'Code d’accès','Création, confirmation et récupération protégée.',change)
+            lock=QPushButton('Verrouiller');lock.setEnabled(b.private);lock.clicked.connect(b.lock_private_window);preference_row(rows,'Verrouiller cette fenêtre','Disponible dans une fenêtre privée.',lock)
+            rows=section(layout,'Protection et données')
+            controls=QPushButton('Ouvrir');controls.clicked.connect(b.site_panel);preference_row(rows,'Protection du site','Autorisations temporaires, données et activité.',controls)
+            clear=QPushButton('Effacer…');clear.clicked.connect(b.clear);preference_row(rows,'Historique et cache','Les cookies de connexion sont conservés.',clear)
+            cookies=QPushButton('Gérer…');cookies.clicked.connect(b.clear_cookies);preference_row(rows,'Cookies et connexions','Efface les cookies du profil classique avec votre accord.',cookies)
+            self.toggle(layout,'Limiter les adresses réseau exposées par WebRTC','webrtc_public',True,b.apply_web_preferences)
         elif index==3:
             frame,c=card('VPN','VPN non configuré');layout.addWidget(frame)
             iconlabel=QLabel();iconlabel.setPixmap(generated_icon('vpn',72).pixmap(72,72));c.addWidget(iconlabel)
@@ -315,7 +359,8 @@ class SettingsPage(InternalPage):
             c.addWidget(text('Le filtrage est appliqué aux sites ouverts en mode compatible. Les publicités intégrées à certaines vidéos peuvent évoluer.'))
         elif index==6:
             ai_frame,ai_layout=card('Suggestions de recherche','Complétions et corrections avec le service Nova.');layout.addWidget(ai_frame)
-            self.toggle(ai_layout,'Activer les suggestions IA en ligne','ai_suggestions',True)
+            self.toggle(ai_layout,'Suggestions en ligne','ai_suggestions',True,b.set_online_suggestions)
+            action(ai_layout,'Contrôler les envois de texte',lambda:self.nav.setCurrentRow(2))
             ai_layout.addWidget(text('Le texte de recherche est envoyé au service Nova puis à Groq après une pause de frappe. Aucun historique, favori, formulaire ni mot de passe. Aucune clé à saisir. Propositions locales si le quota partagé est atteint.'))
             frame,c=card('Moteur de recherche');layout.addWidget(frame);combo=QComboBox();combo.addItems(['Nova Search','Google','DuckDuckGo','Bing']);combo.setCurrentText(b.data.get('preferences',{}).get('search_engine','Nova Search'));combo.currentTextChanged.connect(b.set_search_engine);c.addWidget(combo)
             c.addWidget(text('Nova Search conserve l’interface Nova. Un serveur connecté à Brave API active la recherche Web. Au plafond quotidien ou au quota Brave, Google prend automatiquement le relais. Sans serveur, seul le petit index local est utilisé.'))
@@ -358,3 +403,6 @@ class SettingsPage(InternalPage):
             action(c,'Voir la version disponible',lambda:b.updater.details())
             b.updater.statusChanged.connect(self.update_status.setText)
             c.addWidget(text('Vérification au démarrage, au retour dans Nova et toutes les 5 minutes. Notification dès qu’une nouvelle version est détectée.'))
+
+
+SETTINGS_STYLE="""QWidget#novaPage{background:#101012}QFrame#sidebar{background:#131315;border-right:1px solid #29292e}QFrame#card{background:#18181c;border:1px solid #303035;border-radius:10px}QFrame#settingGroup{background:#19191d;border:1px solid #303035;border-radius:10px}QWidget#preferenceRow{background:transparent;border-bottom:1px solid #2a2a30}QLabel{color:#aaaab5}QLabel#pageTitle{color:#eeeeef;font-size:24px}QLabel#cardTitle{color:#e4e4e8;font-size:16px}QLineEdit,QComboBox{background:#18181c;color:#dddde3;border:1px solid #34343a;border-radius:8px}QPushButton{background:#242429;color:#dddddf;border:1px solid #42424a;border-radius:7px;padding:7px 12px;font-size:12px}QPushButton:hover{background:#303036;border-color:#666673}QPushButton#primary{background:#7956bd;border:0}QPushButton:disabled{color:#6c6c77;background:#1d1d21;border-color:#2d2d33}QScrollBar::handle:vertical{background:#42424b;border-radius:3px}"""
