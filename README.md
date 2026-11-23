@@ -68,3 +68,29 @@ Voir `sync-server/DEPLOIEMENT.txt`. Aucun serveur public n'est configuré par d�
 Version de développement non auditée. Aucun service VPN n'est intégré. Les sessions Qt et WebView2 sont distinctes. Le blocage de chaque publicité YouTube n'est pas garanti.
 
 Qt/PySide6, Chromium, WebView2 et uBlock Origin Lite conservent leurs propres licences. Les notices disponibles sont dans `browser/third-party-notices` et `browser/blocker`. uBlock Origin Lite est fourni sans modification depuis la version `2026.1122.1948` du dépôt officiel `uBlockOrigin/uBOL-home`. Son code source et sa licence sont conservés avec l'extension.
+
+## Importation et fonctions 3.6
+
+Le premier lancement présente Nova et propose un import explicite. Les favoris
+et l'historique peuvent être lus depuis les profils locaux Chrome, Edge, Brave
+et Opera. Les exports de favoris HTML / JSON et l'historique Chrome Takeout JSON
+sont acceptés. Les mots de passe sont importés via CSV (url,username,password)
+après confirmation et stockés dans le coffre Windows chiffré. La source CSV
+reste en clair : supprimer ce fichier après vérification de l'importation.
+La connexion Google ne donne pas accès aux mots de passe ni aux cookies Chrome.
+Les cookies, passkeys, extensions et moyens de paiement ne sont pas importés.
+Les identifiants existants ne sont pas écrasés. Le remplissage reste limité
+au même site HTTPS ; les changements de domaine nécessitent un nouvel identifiant.
+
+Le lecteur flottant (menu Nova) détache l'onglet actuel dans une petite fenêtre
+au-dessus des autres fenêtres, puis le replace avec Revenir à l'onglet. Dans
+cette première version, il contient la page du lecteur, pas un flux vidéo extrait.
+Les téléchargements du moteur classique disposent d'un panneau Nova avec
+progression/pause/reprise/annulation et accès au dossier ; ceux de WebView2
+conservent actuellement le dialogue du moteur. La reprise dépend du serveur.
+Les fichiers ne s'ouvrent pas automatiquement.
+
+La restauration propose les URL et leur ordre de la dernière session, sans
+restaurer formulaires, POST ou positions de lecture. Les URL locales et internes
+ne sont pas sauvegardées. La liste est enregistrée après une courte temporisation
+et à la fermeture ; une panne peut perdre les toutes dernières modifications.

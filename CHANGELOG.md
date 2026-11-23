@@ -1,5 +1,15 @@
 # Historique
 
+## 3.6.0
+
+- Présentation au premier lancement, illustration Nova et confirmation supplémentaire pour passer l'importation.
+- Import choisi des favoris et de l'historique de profils locaux, exports HTML/JSON et mots de passe CSV.
+- Remplissage du mot de passe pendant la saisie de l'e-mail sur le même site HTTPS.
+- Lecteur flottant toujours au-dessus, accessible depuis le menu Nova, avec retour dans l'onglet.
+- Panneau de téléchargements du moteur classique : progression, pause/reprise, annulation et dossier.
+- Sauvegarde de la liste d'onglets et proposition de restauration au lancement.
+- Indicateurs compacts pour l'audio, la pause et la fenêtre flottante.
+
 ## 3.5.0
 
 - Pause des vidéos et de l'audio en quittant un onglet, désactivable dans Optimiser le navigateur.

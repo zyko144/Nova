@@ -311,6 +311,7 @@ class SettingsPage(InternalPage):
             setting_action(c,'Fichiers temporaires','Conserver les favoris et les connexions.','Vider le cache',b.clear_cache)
             c.addWidget(text('L’optimisation manuelle allège les onglets classiques. La pause des lecteurs vidéo en arrière-plan se règle avec l’option ci-dessus. Le cache disque est plafonné à 256 Mio.'))
         elif index==8:
+            action(layout,"Importer mes données…",b.open_import)
             frame,c=card('Compte Google','Votre nom, votre photo et votre identité dans Nova.');layout.addWidget(frame);action(c,'Ouvrir mon compte',b.open_account,True);c.addWidget(text('Connexion Google uniquement pour le moment. La synchronisation cloud reste désactivée.'))
         elif index==10:
             frame,c=card('Identifiants et saisie','Un coffre local, protégé par votre session Windows.');layout.addWidget(frame)

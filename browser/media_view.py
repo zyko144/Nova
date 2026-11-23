@@ -70,6 +70,7 @@ class MediaView(QWidget):
             if kind=='url':
                 if self.pending_url and not self.ready:continue
                 self._url=QUrl(value); self.urlChanged.emit(self._url)
+            elif kind=='audible':self._audible=bool(value);self.historyChanged.emit()
             elif kind=='title': self._title=value; self.titleChanged.emit(value)
             elif kind=='favicon' and isinstance(value,str) and len(value)<512000:
                 try:

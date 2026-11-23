@@ -27,7 +27,7 @@ sealed class MediaWindow : Form
     readonly WebView2 web = new() { Dock = DockStyle.Fill, DefaultBackgroundColor=Color.FromArgb(5,4,12) };
     readonly StreamWriter output = new(Console.OpenStandardOutput()) { AutoFlush = true };
     readonly System.Windows.Forms.Timer sizeTimer = new() { Interval = 100 };
-    readonly IntPtr parent;
+    IntPtr parent;
     readonly string profile, initialUrl;
     readonly bool probe;
     readonly bool noAdblock;
@@ -115,6 +115,7 @@ sealed class MediaWindow : Form
             var options = new CoreWebView2EnvironmentOptions { AreBrowserExtensionsEnabled = true };
             var environment = await CoreWebView2Environment.CreateAsync(null, profile, options);
             await web.EnsureCoreWebView2Async(environment);
+            web.CoreWebView2.IsDocumentPlayingAudioChanged+=(_,_)=>Send(new {type="audible",value=web.CoreWebView2.IsDocumentPlayingAudio});
             web.CoreWebView2.FrameCreated+=(_,e)=>TrackFrame(e.Frame);
             web.CoreWebView2.NewWindowRequested += (_, e) => { e.Handled = true; if (SafeUrl(e.Uri)) Send(new {type="open-tab",value=e.Uri}); };
             try
@@ -236,6 +237,7 @@ sealed class MediaWindow : Form
                     else if (cmd == "forward" && web.CanGoForward) web.GoForward();
                     else if (cmd == "reload") web.Reload();
                     else if (cmd == "focus") web.Focus();
+                    else if (cmd == "reparent" && long.TryParse(value,out long handle)) {parent=new IntPtr(handle);SetParent(Handle,parent);}
                     else if (cmd == "suspend") _=SuspendMedia();
                     else if (cmd == "resume") _=ResumeMedia(value=="focus");
                     else if (cmd == "autofill") _=FillForm(value);

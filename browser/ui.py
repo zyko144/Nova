@@ -103,6 +103,14 @@ class NovaTabBar(QTabBar):
         painter.setFont(QFont('Segoe UI',10))
         for i in range(self.count()):
             rect=self.tabRect(i);selected=i==self.currentIndex()
+            view=self.tabData(i);state=''
+            if view is not None:
+                if getattr(view,'_floating',False):state='↗'
+                elif getattr(view,'_nova_suspended',False):state='Ⅱ'
+                elif getattr(view,'_audible',False):state='♪'
+                elif hasattr(view,'page'):
+                    try:state='♪' if view.page().recentlyAudible() else ''
+                    except RuntimeError:pass
             if selected:
                 painter.setPen(Qt.PenStyle.NoPen);painter.setBrush(QColor('#191224'));painter.drawRoundedRect(QRectF(rect).adjusted(0,3,0,-2),15,15)
             narrow=rect.width()<85
@@ -111,7 +119,9 @@ class NovaTabBar(QTabBar):
             if getattr(self,'show_icons',True) and (not narrow or not selected):
                 image=self.tabIcon(i).pixmap(16,16);painter.drawPixmap(rect.x()+(rect.width()-16)//2 if narrow else rect.x()+14,rect.center().y()-8,image)
             if narrow:continue
+            if state:
+                painter.setPen(QColor('#b68bdd'));painter.drawText(rect.adjusted(0,0,-33,0),Qt.AlignmentFlag.AlignVCenter|Qt.AlignmentFlag.AlignRight,state)
             painter.setPen(QColor('#eee5fa' if selected else '#9488a7'))
-            textRect=rect.adjusted(47 if getattr(self,'show_icons',True) else 17,0,-34,0)
+            textRect=rect.adjusted(47 if getattr(self,'show_icons',True) else 17,0,-54 if state else -34,0)
             text=painter.fontMetrics().elidedText(self.tabText(i),Qt.TextElideMode.ElideRight,textRect.width())
             painter.drawText(textRect,Qt.AlignmentFlag.AlignVCenter|Qt.AlignmentFlag.AlignLeft,text)

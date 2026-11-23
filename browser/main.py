@@ -200,6 +200,11 @@ class Browser(QMainWindow):
         self.update_tab_style()
         self.updater=Updater(self)
         self.address_suggestions=AddressSuggestions(self)
+        from downloads import Downloads
+        self.download_panel=Downloads(self)
+        self._session_timer=QTimer(self);self._session_timer.setSingleShot(True);self._session_timer.setInterval(600);self._session_timer.timeout.connect(self.save_session)
+        self.previous_session=self.data.get('session',{});self._session_ready=False
+        QTimer.singleShot(0,self.start_session)
     def save(self):
         self._save_timer.stop()
         saved={k:v for k,v in self.data.items() if k!='nova_search_base'}
@@ -211,7 +216,15 @@ class Browser(QMainWindow):
     def update_google_profile(self,*args):
         client=self.sync_client;self.profile_action.setIcon(QIcon(client.avatar) if not client.avatar.isNull() else icon('profile'))
         self.profile_action.setToolTip((client.google_profile.get('name') or client.email or 'Compte Google')+('\n'+client.email if client.email else ''))
-    def current(self): return self.tabs.currentWidget()
+    def current(self):
+        view=self.tabs.currentWidget();floating=getattr(self,'floating',None)
+        return floating.view if floating and view is floating.placeholder else view
+    def floating_player(self):
+        if getattr(self,'floating',None):self.floating.raise_();return
+        view=self.current()
+        if not isinstance(view,(MediaView,QWebEngineView)):return
+        from floating import FloatingPlayer
+        self.floating=FloatingPlayer(self,view)
     def activate_tab(self,index):
         view=self.top_tabs.tabData(index) if index>=0 else None
         if view is not None and self.tabs.indexOf(view)>=0:self.tabs.setCurrentWidget(view)
@@ -227,7 +240,33 @@ class Browser(QMainWindow):
             if previous is not None and not getattr(previous,'_closing',False) and self.data['preferences'].get('pause_background_tabs',True):self.pause_view(previous)
             if current is not None:self.resume_view(current)
         self.sync(force=True)
+        if hasattr(self,'_session_timer') and self._session_ready:self._session_timer.start()
+        self.top_tabs.update()
+    def save_session(self):
+        if not self._session_ready:return
+        from sessions import snapshot
+        self.data['session']=snapshot(self);self.save()
+    def start_session(self):
+        self._session_ready=True
+        if QApplication.applicationName()!='NovaBrowser':return
+        if self.previous_session.get('tabs'):
+            self.updater.notify('Retrouvez vos onglets','Votre dernière session est disponible.',self.restore_session,action_text='Restaurer la session',symbol='reload')
+        if not self.data.get('welcome_completed'):
+            from onboarding import Welcome
+            self.welcome=Welcome(self);self.welcome.show()
+    def restore_session(self):
+        tabs=self.previous_session.get('tabs',[]);created=[]
+        from import_data import safe_url
+        for entry in tabs[:100]:
+            url=safe_url(entry.get('url',''))
+            if url:created.append(self.new_tab(QUrl(url)))
+        if created:self.tabs.setCurrentWidget(created[min(self.previous_session.get('selected',0),len(created)-1)])
+        self.previous_session={};self.save_session()
+    def open_import(self):
+        from onboarding import ImportDialog
+        ImportDialog(self).exec()
     def pause_view(self,view):
+        if getattr(view,"_floating",False):return
         if getattr(view,'_nova_suspended',False) or getattr(view,'_closing',False):return
         if isinstance(view,MediaView):view._nova_suspended=True;view.send('suspend')
         elif isinstance(view,QWebEngineView):
@@ -524,7 +563,7 @@ class Browser(QMainWindow):
             else: QMessageBox.information(self,'Bloqueur de publicités','uBlock Origin Lite : '+view.adblock_name)
         else: QMessageBox.information(self,'Bloqueur de publicités','uBlock Origin Lite est intégré aux onglets du moteur vidéo compatible. Utilisez le bouton vidéo pour ouvrir ce site avec le bloqueur, puis l’icône Extensions pour ses réglages.')
     def downloads_menu(self):
-        QMessageBox.information(self,'Téléchargements','\n'.join(self.download_records[-15:]) or 'Aucun téléchargement dans cette session.')
+        self.download_panel.show();self.download_panel.raise_();self.download_panel.activateWindow()
     def new_tab(self, url=None):
         view=NovaWebView(self); page=Page(self.profile,self);page.setBackgroundColor(QColor('#07060e')); view.setPage(page)
         install_bridge(self,view)
@@ -546,6 +585,7 @@ class Browser(QMainWindow):
         view.iconChanged.connect(lambda image:self.tab_favicon(view,image))
         view.urlChanged.connect(lambda u:self.page_url_changed(view))
         view.loadFinished.connect(lambda ok:self.loaded(view,ok))
+        page.recentlyAudibleChanged.connect(lambda *args:self.top_tabs.update())
         if isinstance(url,QUrl): view.setUrl(url)
         else:
             page.home_pending=True
@@ -559,6 +599,7 @@ class Browser(QMainWindow):
         self.current().setHtml(render_home(self.data),QUrl('about:blank'))
     def close_tab(self,index):
         if not 0<=index<self.tabs.count():return
+        if getattr(self,"floating",None) and self.tabs.widget(index) is self.floating.placeholder:self.floating.close()
         view=self.tabs.widget(index)
         view._closing=True
         hidden=getattr(view,'forward_media',None)
@@ -568,6 +609,7 @@ class Browser(QMainWindow):
         view.hide()
         self.top_tabs.blockSignals(True); self.top_tabs.removeTab(index); self.top_tabs.blockSignals(False)
         self.tabs.removeTab(index)
+        if hasattr(self,'_session_timer') and self._session_ready:self._session_timer.start()
         if isinstance(view,MediaView):
             if view.previous_view is not None:view.previous_view.page().deleteLater();view.previous_view.deleteLater();view.previous_view=None
             view.stop(); view.deleteLater()
@@ -617,7 +659,7 @@ class Browser(QMainWindow):
         if self.vault is None:return
         origin=secure_origin(view.url().toString())
         if not origin:return
-        records=self.vault.for_site(origin);prefs=self.data['preferences'];record=next((x for x in records if x['username']==username),None)
+        records=self.vault.for_site(origin);prefs=self.data['preferences'];record=next((x for x in records if x['username'].strip().casefold()==username.strip().casefold()),None)
         if record is None and not username and len(records)==1:record=records[0]
         payload={'origin':origin,'emails':self.vault.data['emails'] if prefs.get('remember_emails',True) else []}
         if record and prefs.get('autofill',True):payload.update(username=record['username'],password=record['password'])
@@ -639,6 +681,7 @@ class Browser(QMainWindow):
         dialog.buttons('Fermer','Annuler');dialog.exec()
     def page_url_changed(self,view):
         if view is self.current():self.sync()
+        if hasattr(self,'_session_timer') and self._session_ready:self._session_timer.start()
     def sync(self,*args,force=False):
         if not self.current(): return
         if isinstance(self.current(),QWebEngineView):self.current().page().setLifecycleState(QWebEnginePage.LifecycleState.Active)
@@ -676,6 +719,7 @@ class Browser(QMainWindow):
         path,_=QFileDialog.getSaveFileName(self,'Enregistrer le téléchargement',str(Path.home()/'Downloads'/Path(item.downloadFileName()).name))
         if not path: item.cancel(); return
         item.setDownloadDirectory(str(Path(path).parent)); item.setDownloadFileName(Path(path).name); item.accept()
+        self.download_panel.add(item,path);self.downloads_menu()
         self.download_records.append(Path(path).name)
         item.stateChanged.connect(lambda state:self.statusBar().showMessage(f'Téléchargement : {item.downloadFileName()} · {state.name}'))
     def menu(self):
@@ -683,6 +727,9 @@ class Browser(QMainWindow):
         menu.addAction(icon('settings'),'Paramètres Nova').triggered.connect(self.open_settings)
         menu.addAction(icon('profile'),'Compte Google').triggered.connect(self.open_account)
         menu.addAction(icon('plus'),'Ajouter une application…').triggered.connect(self.add_shortcut)
+        menu.addAction('Restaurer la dernière session').triggered.connect(self.restore_session)
+        menu.addAction('Importer mes données…').triggered.connect(self.open_import)
+        menu.addAction('Lecteur flottant').triggered.connect(self.floating_player)
         menu.addSeparator()
         for title,key in [('Favoris','bookmarks'),('Historique','history')]:
             sub=menu.addMenu(title)
@@ -711,6 +758,8 @@ class Browser(QMainWindow):
         self.data['history']=[]; self.profile.clearHttpCache(); self.save()
         self.statusBar().showMessage('Historique et cache effacés. Les cookies de connexion sont conservés.',6000)
     def closeEvent(self,event):
+        if getattr(self,"floating",None):self.floating.close()
+        self._session_timer.stop();self.save_session()
         self.save()
         if self.search:self.search.close()
         for i in range(self.tabs.count()):
