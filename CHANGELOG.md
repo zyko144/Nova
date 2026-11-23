@@ -1,5 +1,9 @@
 # Historique
 
+## 3.7.1
+
+- Panneau d'importation défilant pour conserver toutes les actions accessibles dans une fenêtre compacte.
+
 ## 3.7.0
 
 - Présentation intégrée dans la fenêtre principale, avec fond illustré, fondu du texte et transition de l'illustration.

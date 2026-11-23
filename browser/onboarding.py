@@ -1,7 +1,7 @@
 from pathlib import Path
 from PySide6.QtCore import Qt,QUrl,QPropertyAnimation,QVariantAnimation,QEasingCurve
 from PySide6.QtGui import QPixmap,QPainter,QColor,QLinearGradient
-from PySide6.QtWidgets import QDialog,QVBoxLayout,QHBoxLayout,QLabel,QPushButton,QStackedWidget,QComboBox,QCheckBox,QFileDialog,QWidget,QGraphicsOpacityEffect
+from PySide6.QtWidgets import QDialog,QVBoxLayout,QHBoxLayout,QLabel,QPushButton,QStackedWidget,QComboBox,QCheckBox,QFileDialog,QWidget,QGraphicsOpacityEffect,QScrollArea
 from ui import NovaDialog,NovaMessage
 from import_data import profiles,read_profile,read_export,apply_import
 
@@ -27,6 +27,9 @@ class ImportDialog(NovaDialog):
         note=QLabel('L’import reste local et ne copie pas les connexions déjà ouvertes. Les mots de passe sont chiffrés dans Nova ; le CSV source reste en clair, à supprimer après vérification.');note.setWordWrap(True);self.body.addWidget(note)
         self.status=QLabel('Aucune donnée n’est importée avant votre clic.');self.status.setWordWrap(True);self.body.addWidget(self.status);self.buttons('Terminer','Fermer')
         self.download_directory=QStandardPaths.writableLocation(QStandardPaths.StandardLocation.DownloadLocation);self.scan=QTimer(self);self.scan.setInterval(2000);self.scan.timeout.connect(self.find_export);self.scan.start();self.finished.connect(self.scan.stop);self.find_export()
+        outer=self.body;content=QWidget();inner=QVBoxLayout(content);inner.setContentsMargins(8,8,8,8);inner.setSpacing(12)
+        while outer.count():inner.addItem(outer.takeAt(0))
+        scroll=QScrollArea();scroll.setWidgetResizable(True);scroll.setStyleSheet('QScrollArea{border:0;background:transparent}QScrollArea>QWidget>QWidget{background:#0b0811}');scroll.setWidget(content);outer.setContentsMargins(16,16,16,16);outer.addWidget(scroll);self.resize(650,680)
     def toggle_options(self):self.options.setVisible(not self.options.isVisible())
     def update_profile(self):
         if self.sources:self.profile_button.setText('Importer de '+self.sources[self.combo.currentIndex()][0])
