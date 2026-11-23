@@ -14,4 +14,5 @@ if (Test-Path -LiteralPath $icuFile) {
     Move-Item -LiteralPath $icuFile -Destination (Join-Path $PSScriptRoot 'build/icuuc-excluded.dll') -Force
 }
 Copy-Item MediaHost/bin-runtime -Destination dist/NovaBrowser/MediaHost -Recurse -Force
+Copy-Item Configurer-Google-Nova.ps1,Configurer-Google.cmd dist/NovaBrowser/ -Force
 Write-Output 'Prêt : dist/NovaBrowser/NovaBrowser.exe'

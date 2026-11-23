@@ -38,3 +38,10 @@ est encore valide. À expiration, se reconnecter à Google.
 Si Google répond invalid_client et exige un secret de bureau, fournir
 uniquement sur la machine une valeur renouvelée via NOVA_GOOGLE_CLIENT_SECRET.
 Ne jamais inclure un secret dans GitHub ou dans le paquet distribué.
+
+NOVA 3.4.2 : le client fourni exige effectivement client_secret au point
+d’échange Google. Lancez Configurer-Google.cmd dans le dossier Nova et entrez
+un secret renouvelé du même client de bureau. La saisie est masquée et le
+réglage est chiffré par DPAPI dans AppLocalData/NovaBrowser/NovaBrowser.
+Aucun secret réel ne figure dans les sources ou dans la distribution.
+Le secret peut aussi être fourni via NOVA_GOOGLE_CLIENT_SECRET localement.

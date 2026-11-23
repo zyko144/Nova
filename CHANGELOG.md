@@ -1,5 +1,11 @@
 # Historique
 
+## 3.4.2
+
+- Configuration locale du client Google via un outil de saisie masquée et Windows DPAPI.
+- Le secret du client de bureau n'est ni intégré aux sources ni inclus dans la distribution.
+- La connexion n'est lancée qu'après configuration, pour éviter une autorisation qui ne peut pas aboutir.
+
 ## 3.4.1
 
 - Quand le plafond quotidien Nova ou le quota Brave est atteint, Google prend automatiquement le relais avec les mêmes mots-clés.

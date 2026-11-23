@@ -5,6 +5,13 @@ from PySide6.QtCore import QObject,Signal,QTimer,QUrl,QByteArray
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtNetwork import QNetworkRequest
 from version import GOOGLE_DESKTOP_CLIENT_ID
+from vault import protect
+
+def desktop_secret(browser):
+    value=os.environ.get('NOVA_GOOGLE_CLIENT_SECRET','').strip()
+    if value:return value
+    try:return protect((browser.root/'google-client.dat').read_bytes(),True).decode().strip()
+    except (OSError,UnicodeError,ValueError):return ''
 
 def verify_identity(token,nonce):
     from google.oauth2 import id_token
@@ -25,6 +32,8 @@ class GoogleFlow(QObject):
         self.timer=QTimer(self);self.timer.setSingleShot(True);self.timer.timeout.connect(self.cancel)
     def start(self,endpoint):
         if self.in_progress:self.client.statusChanged.emit('Une connexion Google est déjà en cours.');return
+        if not desktop_secret(self.client.browser):
+            self.client.statusChanged.emit('Google nécessite une configuration sur ce PC. Lancez Configurer-Google.cmd dans le dossier Nova, puis réessayez.');return
         self.in_progress=True
         self.generation+=1
         generation=self.generation
@@ -61,7 +70,8 @@ class GoogleFlow(QObject):
         request=QNetworkRequest(QUrl('https://oauth2.googleapis.com/token'));request.setHeader(QNetworkRequest.KnownHeaders.ContentTypeHeader,'application/x-www-form-urlencoded');request.setTransferTimeout(20000)
         request.setAttribute(QNetworkRequest.Attribute.RedirectPolicyAttribute,QNetworkRequest.RedirectPolicy.ManualRedirectPolicy)
         fields={'client_id':GOOGLE_DESKTOP_CLIENT_ID,'redirect_uri':self.return_uri,'code':code,'code_verifier':self.verifier,'grant_type':'authorization_code'}
-        if os.environ.get('NOVA_GOOGLE_CLIENT_SECRET'):fields['client_secret']=os.environ['NOVA_GOOGLE_CLIENT_SECRET']
+        secret=desktop_secret(self.client.browser)
+        if secret:fields['client_secret']=secret
         data=urlencode(fields).encode()
         reply=self.client.network.post(request,QByteArray(data))
         nonce=self.nonce
