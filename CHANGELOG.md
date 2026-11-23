@@ -1,5 +1,10 @@
 # Historique
 
+## 3.4.4
+
+- Correction de l'identifiant client Google pour correspondre au secret configuré localement.
+- Possibilité de surcharger l'identifiant public sur le PC, sans publier de secret.
+
 ## 3.4.3
 
 - Recherche Google par défaut, sans Brave ni serveur requis, avec l'accueil Nova conservé.

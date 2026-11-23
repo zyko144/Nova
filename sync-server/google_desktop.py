@@ -1,6 +1,6 @@
 import os,secrets,time
 
-DEFAULT_CLIENT='54433304112-ok8du14eau4atn121prcek88mv21qblf.apps.googleusercontent.com'
+DEFAULT_CLIENT='54433304112-0h0sotfg4l7ql274mk9l5grjg1bhgjj1.apps.googleusercontent.com'
 def verify_token(token,nonce):
     from google.oauth2 import id_token
     from google.auth.transport.requests import Request
