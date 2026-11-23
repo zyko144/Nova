@@ -1,5 +1,10 @@
 # Historique
 
+## 3.4.1
+
+- Quand le plafond quotidien Nova ou le quota Brave est atteint, Google prend automatiquement le relais avec les mêmes mots-clés.
+- Bascule explicitée dans les paramètres et dans le pied de page Nova Search.
+
 ## 3.4.0
 
 - Nova Search intégré à l'accueil existant : recherche Web via serveur Brave API configurable, index local de secours.

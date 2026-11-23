@@ -40,4 +40,5 @@ def page(query,found,stats,kind='all',order='relevance',about=False):
         summary='Résultats Web · fournis par Brave' if remote else str(found['total'])+' résultat(s) dans l’index Nova · '+str(found['milliseconds'])+' ms'
         content='<main><nav class="filters">'+filters+'</nav><p class="summary">'+summary+'</p><section class="results">'+results+'<nav class="pages">'+pages+'</nav></section></main>'
     footer='Résultats Web fournis par Brave' if remote else str(stats['pages'])+' pages, dont '+str(stats['crawled'])+' explorées'
+    if remote:footer+=' · Google prend le relais si le quota est atteint'
     return '<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'+e(query+' — ' if query else '')+'Nova Search</title><link rel="stylesheet" href="style.css"><link rel="icon" href="data:,"></head><body>'+header+content+'<footer><span>Nova Search · '+footer+'</span><span><a href="about">Fonctionnement et confidentialité</a></span></footer><script src="app.js" defer></script></body></html>'

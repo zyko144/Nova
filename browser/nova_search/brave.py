@@ -7,6 +7,7 @@ from urllib.error import HTTPError,URLError
 from html.parser import HTMLParser
 
 class SearchUnavailable(Exception):pass
+class SearchQuotaReached(SearchUnavailable):pass
 class NoRedirect(HTTPRedirectHandler):
     def redirect_request(self,req,fp,code,msg,headers,newurl):raise HTTPError(req.full_url,code,'Redirect refused',headers,fp)
 
@@ -32,7 +33,7 @@ class BraveSearch:
         day=datetime.now(timezone.utc).strftime('%Y-%m-%d')
         with self.local.connect() as db:
             db.execute('BEGIN IMMEDIATE');row=db.execute('SELECT requests FROM api_budget WHERE day=?',(day,)).fetchone()
-            if (row[0] if row else 0)>=self.limit:raise SearchUnavailable('Le plafond quotidien de recherches Nova est atteint. Réessayez demain.')
+            if (row[0] if row else 0)>=self.limit:raise SearchQuotaReached('Le plafond quotidien de recherches Nova est atteint.')
             db.execute('INSERT INTO api_budget VALUES(?,1) ON CONFLICT(day) DO UPDATE SET requests=requests+1',(day,))
             db.execute('DELETE FROM api_budget WHERE day<?',(day,))
     def search(self,query,kind='all',page=1,order='relevance'):
@@ -48,7 +49,7 @@ class BraveSearch:
             if len(raw)>2*1024*1024:raise ValueError()
             data=json.loads(raw)
         except HTTPError as error:
-            if error.code==429:raise SearchUnavailable('Quota Brave temporairement atteint. Réessayez plus tard.') from None
+            if error.code==429:raise SearchQuotaReached('Quota Brave temporairement atteint.') from None
             if error.code in (401,403):raise SearchUnavailable('La clé de recherche du serveur doit être vérifiée par son administrateur.') from None
             raise SearchUnavailable('La recherche Web est temporairement indisponible.') from None
         except (OSError,URLError,ValueError):raise SearchUnavailable('La recherche Web ne répond pas. Réessayez dans un instant.') from None

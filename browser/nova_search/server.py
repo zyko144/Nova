@@ -4,7 +4,7 @@ from http.server import BaseHTTPRequestHandler,ThreadingHTTPServer
 from urllib.parse import urlsplit,parse_qs,quote_plus
 from .index import Index
 from .web import page,STYLE,SCRIPT
-from .brave import SearchUnavailable
+from .brave import SearchUnavailable,SearchQuotaReached
 
 class SearchServer(ThreadingHTTPServer):
     daemon_threads=True
@@ -49,6 +49,10 @@ class Handler(BaseHTTPRequestHandler):
         if q and route in ('search','api/search') and not self.server.permit(self.client_address[0]):
             self.reply(429,'Trop de recherches. Réessayez dans une minute.');return
         try:found=self.server.index.search(q,kind,number,order)
+        except SearchQuotaReached as error:
+            fallback='https://www.google.com/search?q='+quote_plus(q)
+            if route=='api/search':self.reply(429,json.dumps({'error':str(error),'fallback_url':fallback},ensure_ascii=False),'application/json');return
+            self.send_response(302);self.send_header('Location',fallback);self.send_header('Cache-Control','no-store');self.send_header('Referrer-Policy','no-referrer');self.send_header('Content-Length','0');self.end_headers();return
         except SearchUnavailable as error:
             found={'results':[],'total':0,'page':1,'milliseconds':0,'provider':'Brave','has_more':False,'error':str(error)}
             if route=='api/search':self.reply(503,json.dumps(found,ensure_ascii=False),'application/json');return

@@ -29,8 +29,10 @@ pas active ; le navigateur utilise son index local clairement identifié.
 Brave reçoit les requêtes lancées et fournit les résultats. Nova ne stocke
 pas ces résultats dans l'index et ne journalise pas les requêtes. Seul le
 nombre d'appels est conservé pour plafonner les dépenses. Aucun appel payant
-n'est lancé au fil de la saisie. Une panne/quota produit un message explicite,
-pas un résultat fictif ni une bascule silencieuse. Vérifier séparément les
+n'est lancé au fil de la saisie. Une panne produit un message explicite. Au plafond quotidien Nova ou au
+quota Brave, le navigateur est redirigé vers Google avec les mêmes mots-clés ;
+Google reçoit alors cette recherche et applique sa propre politique. Cette
+bascule est indiquée dans les paramètres et le pied de page de recherche. Vérifier séparément les
 journaux et règles du reverse proxy et du fournisseur.
 
 L'API ne donne pas un compteur global garanti de résultats : Nova n'affiche

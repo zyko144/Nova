@@ -1,12 +1,28 @@
 import io,json,sys,tempfile,unittest
+import threading
+from urllib.request import build_opener,HTTPRedirectHandler
+from urllib.error import HTTPError
+from urllib.parse import urlsplit,parse_qs
 from pathlib import Path
 from unittest.mock import patch,MagicMock
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from nova_search.index import Index
 from nova_search.brave import BraveSearch,SearchUnavailable
 from nova_search.web import page
+from nova_search.server import SearchServer
+
+class NoRedirect(HTTPRedirectHandler):
+    def redirect_request(self,*args):return None
 
 class BraveTest(unittest.TestCase):
+    def test_quota_redirects_to_google_without_calling_brave(self):
+        with tempfile.TemporaryDirectory() as directory:
+            adapter=BraveSearch(Index(Path(directory)/'index.db'),'fixture-key',0);server=SearchServer(('127.0.0.1',0),adapter,'/');threading.Thread(target=server.serve_forever,daemon=True).start()
+            try:
+                with patch('nova_search.brave.build_opener') as api:
+                    with self.assertRaises(HTTPError) as redirected:build_opener(NoRedirect()).open('http://127.0.0.1:'+str(server.server_port)+'/search?q=ecole+%26+python')
+                    self.assertEqual(redirected.exception.code,302);target=urlsplit(redirected.exception.headers['Location']);self.assertEqual(target.netloc,'www.google.com');self.assertEqual(parse_qs(target.query)['q'],['ecole & python']);api.assert_not_called()
+            finally:server.shutdown();server.server_close()
     def test_server_key_mapping_quota_and_no_result_storage(self):
         with tempfile.TemporaryDirectory() as directory:
             local=Index(Path(directory)/'index.db');adapter=BraveSearch(local,'fixture-api-key',1);before=local.stats()

@@ -296,7 +296,7 @@ class SettingsPage(InternalPage):
             c.addWidget(text('Le filtrage est appliqué aux sites ouverts en mode compatible. Les publicités intégrées à certaines vidéos peuvent évoluer.'))
         elif index==6:
             frame,c=card('Moteur de recherche');layout.addWidget(frame);combo=QComboBox();combo.addItems(['Nova Search','Google','DuckDuckGo','Bing']);combo.setCurrentText(b.data.get('preferences',{}).get('search_engine','Nova Search'));combo.currentTextChanged.connect(b.set_search_engine);c.addWidget(combo)
-            c.addWidget(text('Nova Search conserve l’interface Nova. Un serveur connecté à Brave API active la recherche Web ; sans serveur, seul le petit index local est utilisé.'))
+            c.addWidget(text('Nova Search conserve l’interface Nova. Un serveur connecté à Brave API active la recherche Web. Au plafond quotidien ou au quota Brave, Google prend automatiquement le relais. Sans serveur, seul le petit index local est utilisé.'))
             action(c,'Ouvrir Nova Search',lambda:b.new_tab(QUrl(b.search_url())))
             action(c,'Configurer le serveur de recherche Web…',b.configure_search_server)
             action(c,'Ajouter un site à l’index…',b.index_search_site)
