@@ -1,5 +1,9 @@
 # Historique
 
+## 3.6.1
+
+- Présentation immersive : illustration plein cadre, grands titres au premier plan et mots-clés violets.
+
 ## 3.6.0
 
 - Présentation au premier lancement, illustration Nova et confirmation supplémentaire pour passer l'importation.
