@@ -300,14 +300,16 @@ class SettingsPage(InternalPage):
             action(c,'Ouvrir Nova Search',lambda:b.new_tab(QUrl(b.search_url())))
             action(c,'Configurer le serveur de recherche Web…',b.configure_search_server)
             action(c,'Ajouter un site à l’index…',b.index_search_site)
-            search_status=text(str(b.search.index.stats()['pages'])+' pages dans l’index local.');c.addWidget(search_status);b.searchStatus.connect(search_status.setText)
+            search_status=text(str(b.search.index.stats()['pages'])+' pages dans l’index local.' if b.search else 'Index local au repos : il démarre uniquement lorsque vous l’utilisez.');c.addWidget(search_status);b.searchStatus.connect(search_status.setText)
             c.addWidget(text('L’exploration se fait en arrière-plan, sur le site demandé uniquement, avec respect des exclusions robots.txt.'))
         elif index==7:
             frame,c=card('Optimiser le navigateur','Allégez les onglets et l’espace occupé, sans supprimer vos comptes.');layout.addWidget(frame)
+            self.toggle(c,'Mettre en pause les onglets en arrière-plan','pause_background_tabs',True,b.set_background_pause)
+            c.addWidget(text('Les vidéos et l’audio sont mis en pause dès que vous quittez un onglet. Au retour, seule une lecture interrompue par Nova reprend. Désactivez cette option pour écouter un live en arrière-plan.'))
             setting_action(c,'Optimisation rapide','Vider le cache et mettre en veille les onglets classiques inactifs.','Optimiser',b.optimize,True)
-            setting_action(c,'Onglets inactifs','Réduire leur activité sans interrompre les lecteurs vidéo.','Mettre en veille',b.sleep_tabs)
+            setting_action(c,'Onglets inactifs','Réduire l’activité des onglets classiques en arrière-plan.','Mettre en veille',b.sleep_tabs)
             setting_action(c,'Fichiers temporaires','Conserver les favoris et les connexions.','Vider le cache',b.clear_cache)
-            c.addWidget(text('La mise en veille concerne les onglets classiques : les pages peuvent se recharger à leur réactivation. Les lecteurs vidéo restent actifs pour préserver les directs. Le cache disque est plafonné à 256 Mio.'))
+            c.addWidget(text('L’optimisation manuelle allège les onglets classiques. La pause des lecteurs vidéo en arrière-plan se règle avec l’option ci-dessus. Le cache disque est plafonné à 256 Mio.'))
         elif index==8:
             frame,c=card('Compte Google','Votre nom, votre photo et votre identité dans Nova.');layout.addWidget(frame);action(c,'Ouvrir mon compte',b.open_account,True);c.addWidget(text('Connexion Google uniquement pour le moment. La synchronisation cloud reste désactivée.'))
         elif index==10:

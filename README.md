@@ -18,6 +18,24 @@ documenté dans [search-server](search-server/README.md).
 
 ## Construire sous Windows x64
 
+Depuis la version 3.5, les vidéos et l'audio sont mis en pause quand leur onglet
+passe en arrière-plan. Désactiver cette fonction dans **Paramètres > Optimiser
+le navigateur** pour conserver une lecture en fond. Au retour, Nova tente de
+reprendre uniquement les médias qu'il a lui-même interrompus. La première pause
+déclenche une notification avec un raccourci vers ce réglage. Les pages classiques
+éligibles sont gelées en mémoire ; les lecteurs WebView2 masqués sont suspendus
+quand le moteur l'autorise. Les politiques de lecture des sites restent applicables.
+
+Les suggestions de l'accueil et de la barre d'adresse utilisent l'interface Nova
+et les données locales (historique, favoris et recherches récentes). La saisie
+n'est pas transmise à une API de suggestions externe. Flèches, Entrée et Échap
+permettent de naviguer, ouvrir et fermer ces propositions.
+
+Les styles ne s'accumulent plus lors des changements de thème. Les sauvegardes
+d'historique sont regroupées sur une fenêtre de 250 ms et vidées à la fermeture ;
+les réglages et favoris restent enregistrés immédiatement. Le service de recherche
+local démarre uniquement si on utilise l'index Nova, pas avec Google seul.
+
 Installer Python 3.12 et un SDK .NET 10 ou supérieur, puis :
 
 ```powershell

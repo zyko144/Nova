@@ -28,6 +28,7 @@ class MediaView(QWidget):
     credentialCaptured = Signal(object)
     fillRequested = Signal(str)
     historyChanged = Signal()
+    mediaPaused = Signal(int)
     def __init__(self,url,profile,parent=None):
         super().__init__(parent)
         self._url=QUrl(url); self._title='Vidéo'; self.buffer=b''; self.ready=False
@@ -76,6 +77,7 @@ class MediaView(QWidget):
                 except (ValueError,TypeError):pass
             elif kind=='loaded': self.loadFinished.emit(event.get('ok',False))
             elif kind=='history':self.can_back=bool(event.get('back'));self.can_forward=bool(event.get('forward'));self.historyChanged.emit()
+            elif kind=='media-paused':self.mediaPaused.emit(int(event.get('count',0)))
             elif kind=='ready':
                 self.ready=True; self.label.hide()
                 if self.pending_url: self.send('navigate',self.pending_url); self.pending_url=None

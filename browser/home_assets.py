@@ -59,8 +59,8 @@ def build_home(template,shortcuts,data):
     elif engine=='Bing':result=result.replace('https://www.google.com/search','https://www.bing.com/search')
     allowed={'Nova Search':data.get('nova_search_base','https://nova.local/'),'DuckDuckGo':'https://duckduckgo.com/','Bing':'https://www.bing.com/','Google':'https://www.google.com/'}[engine if engine in ('Nova Search','DuckDuckGo','Bing','Google') else 'Nova Search']
     origin=urlsplit(allowed);result=result.replace('form-action https://www.google.com;','form-action '+escape(origin.scheme+'://'+origin.netloc,quote=True)+';')
-    options=''.join('<option value="'+escape(value,quote=True)+'">' for value in data.get('recent_searches',[])[:12])
-    result=result.replace('<input name="q"','<input list="nova-queries" autocomplete="on" name="q"').replace('</form>','</form><datalist id="nova-queries">'+options+'</datalist>')
+    from home_suggestions import decorate
+    result=decorate(result,data)
     css+=':root{color-scheme:dark}'
     result=re.sub(r'<a class="privacy".*?</a>','',result,flags=re.S)
     css+='.settings{left:auto;right:22px;bottom:22px;width:44px;height:44px;display:grid;place-items:center;padding:0;border-radius:13px}.settings:after{display:block;margin:0}.settings svg{display:none}'

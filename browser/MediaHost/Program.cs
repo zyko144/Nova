@@ -35,6 +35,15 @@ sealed class MediaWindow : Form
     CoreWebView2BrowserExtension? blocker;
     uint parentThread,ownThread;
     bool inputAttached;
+    bool suspendRequested;
+    readonly List<CoreWebView2Frame> frames = new();
+    const string PauseScript="(()=>{const playing=[...document.querySelectorAll('video,audio')].filter(e=>!e.paused&&!e.ended);window.__novaPausedMedia=[...new Set([...(window.__novaPausedMedia||[]).filter(e=>e.isConnected),...playing])];playing.forEach(e=>e.pause());return playing.length;})()";
+    const string ResumeScript="(()=>{const media=window.__novaPausedMedia||[];window.__novaPausedMedia=[];media.filter(e=>e.isConnected).forEach(e=>{try{e.play()?.catch(()=>{});}catch{}});})()";
+    void TrackFrame(CoreWebView2Frame frame)
+    {
+        frames.Add(frame);frame.Destroyed+=(_,_)=>frames.Remove(frame);
+        frame.FrameCreated+=(_,e)=>TrackFrame(e.Frame);
+    }
     public MediaWindow(string[] args)
     {
         parent = new IntPtr(long.Parse(args[0])); profile = args[1]; initialUrl = args[2];
@@ -79,7 +88,23 @@ sealed class MediaWindow : Form
     }
     async Task SuspendMedia()
     {
-        try {await web.CoreWebView2.ExecuteScriptAsync("document.querySelectorAll('video,audio').forEach(e=>e.pause())");await web.CoreWebView2.TrySuspendAsync();} catch { }
+        suspendRequested=true;
+        sizeTimer.Interval=1000;
+        try {
+            string paused=await web.CoreWebView2.ExecuteScriptAsync(PauseScript);
+            int.TryParse(paused,out int count);
+            foreach(var frame in frames.ToArray()) {try {string result=await frame.ExecuteScriptAsync(PauseScript);if(int.TryParse(result,out int n))count+=n;}catch { }}
+            if(count>0)Send(new {type="media-paused",count});
+            if(!suspendRequested)return;
+            await web.CoreWebView2.TrySuspendAsync();
+            if(!suspendRequested)await ResumeMedia(false);
+        } catch { }
+    }
+    async Task ResumeMedia(bool focus)
+    {
+        suspendRequested=false;
+        sizeTimer.Interval=100;
+        try {web.CoreWebView2.Resume();if(focus)web.Focus();await web.CoreWebView2.ExecuteScriptAsync(ResumeScript);foreach(var frame in frames.ToArray()){try{await frame.ExecuteScriptAsync(ResumeScript);}catch { }}}catch { }
     }
     void Send(object value) { try { output.WriteLine(JsonSerializer.Serialize(value)); } catch { } }
     static bool SafeUrl(string url) => Uri.TryCreate(url, UriKind.Absolute, out var uri) && (uri.Scheme == "https" || uri.Scheme == "http");
@@ -90,6 +115,7 @@ sealed class MediaWindow : Form
             var options = new CoreWebView2EnvironmentOptions { AreBrowserExtensionsEnabled = true };
             var environment = await CoreWebView2Environment.CreateAsync(null, profile, options);
             await web.EnsureCoreWebView2Async(environment);
+            web.CoreWebView2.FrameCreated+=(_,e)=>TrackFrame(e.Frame);
             web.CoreWebView2.NewWindowRequested += (_, e) => { e.Handled = true; if (SafeUrl(e.Uri)) Send(new {type="open-tab",value=e.Uri}); };
             try
             {
@@ -211,7 +237,7 @@ sealed class MediaWindow : Form
                     else if (cmd == "reload") web.Reload();
                     else if (cmd == "focus") web.Focus();
                     else if (cmd == "suspend") _=SuspendMedia();
-                    else if (cmd == "resume") {web.CoreWebView2.Resume();web.Focus();}
+                    else if (cmd == "resume") _=ResumeMedia(value=="focus");
                     else if (cmd == "autofill") _=FillForm(value);
                     else if (cmd == "adblock-settings" && blockerId.Length>0) web.CoreWebView2.Navigate("chrome-extension://"+blockerId+"/dashboard.html");
                     else if (cmd == "adblock-toggle" && blocker!=null) _=ToggleBlocker(value=="on");

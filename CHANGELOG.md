@@ -1,5 +1,16 @@
 # Historique
 
+## 3.5.0
+
+- Pause des vidéos et de l'audio en quittant un onglet, désactivable dans Optimiser le navigateur.
+- Reprise au retour uniquement pour les médias interrompus par Nova ; protection des changements rapides d'onglets.
+- Première pause expliquée par une notification Nova avec accès direct aux paramètres.
+- Suggestions Nova aérées sur l'accueil et la barre d'adresse, avec icônes, titres, adresses et navigation au clavier.
+- Correction d'une double navigation possible en validant une suggestion avec Entrée.
+- Moteur de recherche local démarré à la demande ; aucun serveur local inutilisé au démarrage avec Google.
+- Styles réappliqués sans accumulation, historique dédoublonné et sauvegardes regroupées.
+- Espace de 12 pixels ajouté entre le logo et les onglets.
+
 ## 3.4.5
 
 - Premier onglet décalé de 4 pixels vers la gauche, avec un espace conservé autour du logo compact.

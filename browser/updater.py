@@ -1,7 +1,7 @@
 import hashlib,json,re,subprocess,sys,time
 from pathlib import Path
 from urllib.parse import urlsplit
-from PySide6.QtCore import Qt,QTimer,QUrl,Signal,QObject
+from PySide6.QtCore import Qt,QTimer,QUrl,Signal,QObject,QSize
 from PySide6.QtNetwork import QNetworkAccessManager,QNetworkRequest,QNetworkReply
 from PySide6.QtWidgets import QFrame,QVBoxLayout,QHBoxLayout,QLabel,QPushButton,QApplication,QPlainTextEdit
 from ui import NovaDialog,generated_icon
@@ -20,16 +20,16 @@ def release_asset(release):
     return None
 
 class UpdateToast(QFrame):
-    def __init__(self,browser,title,message,callback=None):
+    def __init__(self,browser,title,message,callback=None,action_text='Voir la mise à jour',symbol='download'):
         super().__init__(browser,Qt.WindowType.Tool|Qt.WindowType.FramelessWindowHint|Qt.WindowType.WindowDoesNotAcceptFocus)
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating);self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
         self.setStyleSheet('QFrame{background:#110c19;border:1px solid #4a2a66;border-radius:15px}QLabel{color:#c8b9d8;border:0;background:transparent;font-size:12px}QPushButton{background:#28133d;color:#eee2fa;border:0;border-radius:8px;padding:7px 12px;font-size:12px}')
         self.setFixedWidth(345);layout=QVBoxLayout(self);layout.setContentsMargins(18,16,18,16);layout.setSpacing(10)
-        row=QHBoxLayout();symbol=QLabel();symbol.setPixmap(generated_icon('download',24).pixmap(24,24));symbol.setFixedSize(28,28);row.addWidget(symbol);heading=QLabel(title);heading.setStyleSheet('font-weight:600;color:#f2eafa;font-size:14px');row.addWidget(heading);row.addStretch()
-        close=QPushButton('×');close.setFixedSize(24,24);close.clicked.connect(self.close);row.addWidget(close);layout.addLayout(row)
+        row=QHBoxLayout();symbol_label=QLabel();symbol_label.setPixmap(generated_icon(symbol,24).pixmap(24,24));symbol_label.setFixedSize(28,28);row.addWidget(symbol_label);heading=QLabel(title);heading.setStyleSheet('font-weight:600;color:#f2eafa;font-size:14px');row.addWidget(heading);row.addStretch()
+        close=QPushButton();close.setIcon(generated_icon('close',14));close.setIconSize(QSize(14,14));close.setToolTip('Fermer');close.setFixedSize(24,24);close.setStyleSheet('QPushButton{padding:0;background:transparent;border:0;border-radius:7px}QPushButton:hover{background:#28183a}');close.clicked.connect(self.close);row.addWidget(close);layout.addLayout(row)
         label=QLabel(message);label.setTextFormat(Qt.TextFormat.PlainText);label.setWordWrap(True);layout.addWidget(label)
         if callback:
-            button=QPushButton('Voir la mise à jour');button.clicked.connect(lambda:(self.close(),callback()));layout.addWidget(button,0,Qt.AlignmentFlag.AlignLeft)
+            button=QPushButton(action_text);button.clicked.connect(lambda:(self.close(),callback()));layout.addWidget(button,0,Qt.AlignmentFlag.AlignLeft)
         else:QTimer.singleShot(8000,self.close)
         self.adjustSize();self.reposition(browser);self.show()
     def reposition(self,browser):
@@ -56,11 +56,11 @@ class Updater(QObject):
         self.browser.data['last_version']=VERSION;self.browser.save();self.check()
     def focused(self,state):
         if state==Qt.ApplicationState.ApplicationActive and time.monotonic()-self.checked_at>60:self.check()
-    def notify(self,title,message,callback=None):
+    def notify(self,title,message,callback=None,action_text='Voir la mise à jour',symbol='download'):
         if self.toast:
             try:self.toast.close()
             except RuntimeError:pass
-        self.toast=UpdateToast(self.browser,title,message,callback)
+        self.toast=UpdateToast(self.browser,title,message,callback,action_text,symbol)
     def check(self,manual=False):
         if self.busy:return
         self.busy=True;self.checked_at=time.monotonic();self.statusChanged.emit('Recherche de mises à jour…')
