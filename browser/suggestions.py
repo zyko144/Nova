@@ -29,6 +29,7 @@ class SuggestionDelegate(QStyledItemDelegate):
         if label.startswith('Rechercher : '):title=label[13:];detail='Rechercher avec '+self.helper.browser.data['preferences'].get('search_engine','Google');symbol='search'
         elif label.startswith('YouTube : '):title=label[10:];detail='Rechercher sur YouTube';symbol='video'
         elif label.startswith('Reprendre : '):title=label[12:];detail='Recherche récente';symbol='reload'
+        elif label.startswith('IA : '):title=label[5:];detail='';symbol='search'
         else:title=label.rsplit(' · ',1)[0];detail=urlsplit(url).netloc+urlsplit(url).path.rstrip('/')
         painter.save();painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         if option.state & (QStyle.StateFlag.State_Selected|QStyle.StateFlag.State_MouseOver):
@@ -53,6 +54,14 @@ class AddressSuggestions:
         if items:
             width=max(300,min(660,self.browser.address.width()));popup=self.completer.popup();popup.setMinimumWidth(width);popup.setMaximumWidth(width);popup.setFixedHeight(len(items)*54+12);self.completer.complete(QRect(0,0,width,self.browser.address.height()))
         else:self.completer.popup().hide()
+        self.browser.ai.request('address',value,self.ai_results)
+    def ai_results(self,query,values):
+        if not self.browser.address.hasFocus() or self.browser.address.text()!=query or not self.completer.popup().isVisible():return
+        base=suggestions(query,self.browser.data)
+        if len(base)<2:return
+        prefix=base[-2][1].rsplit('=',1)[0]+'='
+        proposals=[('IA : '+value,prefix+quote_plus(value)) for value in values]
+        self.items=(base[:-2][:1]+proposals[:3]+base[-2:])[:6];self.destinations=dict(self.items);self.model.setStringList([label for label,url in self.items]);self.completer.popup().setFixedHeight(len(self.items)*54+12)
     def choose_index(self,index):
         if index.isValid() and index.row()<len(self.items):self.choose(*self.items[index.row()])
     def choose(self,label,url=None):

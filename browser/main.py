@@ -136,6 +136,8 @@ class Browser(QMainWindow):
         try:self.vault=Vault(self.root/'vault.dat')
         except (OSError,ValueError):self.vault=None
         self.last_emails={};self.capture_times={};self.credential_prompt=None
+        from ai_suggestions import AISuggestions
+        self.ai=AISuggestions(self)
         self.profile = QWebEngineProfile(self.data['active'], self)
         folder = self.root / 'profiles' / self.data['active']
         self.profile.setPersistentStoragePath(str(folder / 'storage'))
@@ -272,6 +274,10 @@ class Browser(QMainWindow):
     def open_import(self):
         from onboarding import ImportDialog
         ImportDialog(self).exec()
+    def make_default(self):
+        from default_browser import register_browser
+        try:register_browser()
+        except (OSError,ValueError) as error:QMessageBox.information(self,'Navigateur par défaut',str(error))
     def pause_view(self,view):
         if getattr(view,"_floating",False):return
         if getattr(view,'_nova_suspended',False) or getattr(view,'_closing',False):return
@@ -580,7 +586,8 @@ class Browser(QMainWindow):
         settings=page.settings()
         settings.setAttribute(QWebEngineSettings.WebAttribute.LocalContentCanAccessFileUrls, False)
         settings.setAttribute(QWebEngineSettings.WebAttribute.LocalContentCanAccessRemoteUrls, False)
-        settings.setAttribute(QWebEngineSettings.WebAttribute.JavascriptCanAccessClipboard, False)
+        settings.setAttribute(QWebEngineSettings.WebAttribute.JavascriptCanAccessClipboard, True)
+        settings.setAttribute(QWebEngineSettings.WebAttribute.JavascriptCanPaste, False)
         settings.setAttribute(QWebEngineSettings.WebAttribute.WebRTCPublicInterfacesOnly,self.data['preferences'].get('webrtc_public',True))
         settings.setAttribute(QWebEngineSettings.WebAttribute.FullScreenSupportEnabled, True)
         page.fullScreenRequested.connect(lambda request:(request.accept(),self.fullscreen(request.toggleOn())))
@@ -716,6 +723,7 @@ class Browser(QMainWindow):
         self.statusBar().showMessage('Prêt',2000)
         if self.current() is view:self.sync()
     def permission(self,permission):
+        if permission.permissionType().name=='ClipboardReadWrite':permission.deny();return
         answer=QMessageBox.question(self,'Autorisation du site',f'{permission.origin().toString()} demande : {permission.permissionType().name}.\nAutoriser ?',QMessageBox.StandardButton.Yes|QMessageBox.StandardButton.No,QMessageBox.StandardButton.No)
         if answer==QMessageBox.StandardButton.Yes: permission.grant()
         else: permission.deny()
@@ -740,6 +748,7 @@ class Browser(QMainWindow):
         menu.addAction('Restaurer la dernière session').triggered.connect(self.restore_session)
         menu.addAction('Importer mes données…').triggered.connect(self.open_import)
         menu.addAction('Revoir la présentation').triggered.connect(self.show_welcome)
+        menu.addAction('Définir Nova comme navigateur par défaut').triggered.connect(self.make_default)
         menu.addAction('Lecteur flottant').triggered.connect(self.floating_player)
         menu.addSeparator()
         for title,key in [('Favoris','bookmarks'),('Historique','history')]:
@@ -783,6 +792,7 @@ class Browser(QMainWindow):
 
 if __name__=='__main__':
     app=QApplication(sys.argv); app.setApplicationName('NovaBrowserSmoke-'+uuid.uuid4().hex if '--smoke-test' in sys.argv else 'NovaBrowser'); app.setOrganizationName('NovaBrowser')
+    external_url=next((value for value in sys.argv[1:] if QUrl(value).scheme() in ('http','https') and QUrl(value).host()),'')
     local_server=None
     if '--smoke-test' not in sys.argv:
         profile_root=Path(QStandardPaths.writableLocation(QStandardPaths.AppLocalDataLocation));profile_root.mkdir(parents=True,exist_ok=True)
@@ -790,7 +800,7 @@ if __name__=='__main__':
         instance_lock=QLockFile(str(profile_root/'browser.lock'))
         if not instance_lock.tryLock(0):
             existing=QLocalSocket();existing.connectToServer(instance_name)
-            if existing.waitForConnected(500):existing.write(b'activate');existing.waitForBytesWritten(500)
+            if existing.waitForConnected(500):existing.write(json.dumps({'url':external_url}).encode()+b'\n');existing.waitForBytesWritten(500)
             sys.exit(0)
         local_server=QLocalServer(app);local_server.setSocketOptions(QLocalServer.SocketOption.UserAccessOption);local_server.removeServer(instance_name);local_server.listen(instance_name)
         app.aboutToQuit.connect(instance_lock.unlock)
@@ -799,12 +809,24 @@ if __name__=='__main__':
         def activate_existing():
             connection=local_server.nextPendingConnection()
             if connection:
-                connection.close();connection.deleteLater()
+                buffer=bytearray()
+                def receive():
+                    buffer.extend(bytes(connection.readAll()))
+                    if len(buffer)>8192:connection.close();connection.deleteLater();return
+                    if b'\n' not in buffer:return
+                    try:
+                        value=json.loads(bytes(buffer).split(b'\n',1)[0]).get('url','');url=QUrl(value)
+                        if url.scheme() in ('http','https') and url.host():window.new_tab(url)
+                    except (ValueError,AttributeError,TypeError):pass
+                    connection.close();connection.deleteLater()
+                connection.readyRead.connect(receive)
+                if connection.bytesAvailable():receive()
             if window.isMinimized():window.showNormal()
             window.raise_();window.activateWindow()
         local_server.newConnection.connect(activate_existing)
     if '--smoke-test' in sys.argv:window.setAttribute(Qt.WidgetAttribute.WA_DontShowOnScreen,True)
     window.show()
+    if external_url:QTimer.singleShot(0,lambda:window.new_tab(QUrl(external_url)))
     if '--smoke-test' in sys.argv:
         def check():
             def checked(title):

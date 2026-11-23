@@ -113,3 +113,36 @@ La restauration propose les URL et leur ordre de la dernière session, sans
 restaurer formulaires, POST ou positions de lecture. Les URL locales et internes
 ne sont pas sauvegardées. La liste est enregistrée après une courte temporisation
 et à la fermeture ; une panne peut perdre les toutes dernières modifications.
+
+## Suggestions en ligne et navigateur par défaut (3.8)
+
+Le mode de complétion Groq s’active dans Paramètres > Moteur de recherche.
+La clé se saisit dans Nova et reste chiffrée par Windows dans les données
+utilisateur. Ne jamais inclure une clé dans une distribution. Cette intégration
+utilise openai/gpt-oss-20b sur https://api.groq.com/openai/v1/chat/completions.
+Seul le texte de recherche est envoyé : aucun historique, favori, formulaire
+ou mot de passe. Les adresses Web, e-mails et formats de clés reconnus sont
+exclus. Les suggestions peuvent être erronées ; ce ne sont pas des résultats
+Web vérifiés. Le texte proposé apparaît simplement dans le menu Nova.
+
+Optimisation : pause de frappe de 700 ms, une requête à la fois, intervalle
+minimum de 2,5 secondes, 3 suggestions courtes, cache de 80 entrées en mémoire
+pendant 15 minutes, timeout 4 secondes et temporisation après erreur/quota.
+Un compteur local plafonne à 900 appels par jour UTC. Les limites réelles du
+compte Groq et de tokens s’appliquent également ; le programme ne change pas
+le forfait du compte. Les requêtes et réponses ne sont pas enregistrées sur
+disque par Nova ; les règles de traitement des données Groq s’appliquent.
+L’offre gratuite n’est pas illimitée. https://console.groq.com/docs/rate-limits
+
+Le bouton Définir Nova comme navigateur par défaut enregistre Nova dans les
+applications disponibles pour le compte Windows et ouvre les paramètres
+Windows pour HTTP/HTTPS. Le choix final appartient à l’utilisateur ; le
+programme ne modifie pas UserChoice. Garder le dossier Nova à un emplacement
+stable. Si on le déplace, relancer le bouton pour actualiser les chemins.
+Les liens externes sont transmis à l’instance Nova déjà ouverte.
+
+Les écritures du presse-papiers du moteur classique sont autorisées pour
+faciliter la copie. La lecture silencieuse est refusée. Dans le moteur vidéo,
+la lecture du presse-papiers est autorisée seulement sur action utilisateur,
+sans mémoriser de permission permanente. Ctrl+V et les commandes explicites
+Coller restent disponibles.

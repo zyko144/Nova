@@ -311,6 +311,10 @@ class SettingsPage(InternalPage):
             action(c,'Ouvrir le bloqueur et ses réglages',b.open_blocker_settings)
             c.addWidget(text('Le filtrage est appliqué aux sites ouverts en mode compatible. Les publicités intégrées à certaines vidéos peuvent évoluer.'))
         elif index==6:
+            ai_frame,ai_layout=card('Suggestions IA','Complétions et corrections de recherche avec Groq.');layout.addWidget(ai_frame)
+            action(ai_layout,'Configurer la clé Groq…',b.ai.configure)
+            self.toggle(ai_layout,'Activer les suggestions IA en ligne','ai_suggestions',False)
+            ai_layout.addWidget(text('Le texte saisi dans la recherche est envoyé à Groq après une pause de frappe. Historique, favoris, formulaires et mots de passe ne sont pas envoyés. Quotas gratuits variables ; propositions locales en cas de limite ou d’erreur.'))
             frame,c=card('Moteur de recherche');layout.addWidget(frame);combo=QComboBox();combo.addItems(['Nova Search','Google','DuckDuckGo','Bing']);combo.setCurrentText(b.data.get('preferences',{}).get('search_engine','Nova Search'));combo.currentTextChanged.connect(b.set_search_engine);c.addWidget(combo)
             c.addWidget(text('Nova Search conserve l’interface Nova. Un serveur connecté à Brave API active la recherche Web. Au plafond quotidien ou au quota Brave, Google prend automatiquement le relais. Sans serveur, seul le petit index local est utilisé.'))
             action(c,'Ouvrir Nova Search',lambda:b.new_tab(QUrl(b.search_url())))
@@ -327,6 +331,7 @@ class SettingsPage(InternalPage):
             setting_action(c,'Fichiers temporaires','Conserver les favoris et les connexions.','Vider le cache',b.clear_cache)
             c.addWidget(text('L’optimisation manuelle allège les onglets classiques. La pause des lecteurs vidéo en arrière-plan se règle avec l’option ci-dessus. Le cache disque est plafonné à 256 Mio.'))
         elif index==8:
+            action(layout,'Définir Nova comme navigateur par défaut',b.make_default)
             action(layout,"Importer mes données…",b.open_import)
             frame,c=card('Compte Google','Votre nom, votre photo et votre identité dans Nova.');layout.addWidget(frame);action(c,'Ouvrir mon compte',b.open_account,True);c.addWidget(text('Connexion Google uniquement pour le moment. La synchronisation cloud reste désactivée.'))
         elif index==10:

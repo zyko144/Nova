@@ -1,0 +1,35 @@
+import sys,json,uuid,unittest
+from pathlib import Path
+from unittest.mock import patch,MagicMock
+sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
+from ai_suggestions import permitted,clean_values
+from main import QApplication,Browser,Qt
+from onboarding import Welcome
+
+class AITest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.app=QApplication.instance() or QApplication([]);cls.app.setApplicationName('NovaAIIntegration-'+uuid.uuid4().hex)
+    def test_search_scope_and_sanitized_output(self):
+        self.assertTrue(permitted('mai'));self.assertFalse(permitted('https://private.test/path'));self.assertFalse(permitted('person@example.test'));self.assertFalse(permitted('gsk_fixture-secret'))
+        self.assertEqual(clean_values('{"suggestions":["maison","mail","https://bad.test","maison",4]}','mai'),['maison','mail'])
+    def test_disabled_service_and_cache_do_not_call_api(self):
+        browser=Browser();browser.setAttribute(Qt.WidgetAttribute.WA_DontShowOnScreen,True)
+        try:
+            ai=browser.ai;ai.key='fixture';browser.data['preferences']['ai_suggestions']=False
+            with patch.object(ai.network,'post') as post:
+                ai.request('address','mai',lambda *args:None);ai.send();post.assert_not_called()
+                browser.data['preferences']['ai_suggestions']=True
+                import time
+                ai.cache['mai']=(time.monotonic(),['maison','mail']);values=[];ai.request('address','mai',lambda q,result:values.extend(result));self.assertEqual(values,['maison','mail']);post.assert_not_called()
+        finally:browser.close();self.app.processEvents()
+    def test_welcome_and_import_stay_in_browser_window(self):
+        browser=Browser();browser.setAttribute(Qt.WidgetAttribute.WA_DontShowOnScreen,True);browser.show()
+        try:
+            browser.show_welcome();welcome=browser.welcome;self.assertFalse(welcome.isWindow());welcome.step=1;welcome.render();welcome.perform();self.assertFalse(welcome.import_panel.isWindow());welcome.import_panel.reject();welcome.skip_step();self.assertEqual(welcome.step,1);welcome.skip_step();self.assertEqual(welcome.step,2)
+        finally:browser.close();self.app.processEvents()
+    def test_default_browser_registration_uses_user_capabilities(self):
+        import default_browser
+        with patch.object(sys,'frozen',True,create=True),patch.object(default_browser.winreg,'CreateKey') as create,patch.object(default_browser.winreg,'SetValueEx') as write,patch.object(default_browser.QDesktopServices,'openUrl') as open_settings:
+            default_browser.register_browser();self.assertTrue(open_settings.called)
+            values=[call.args for call in write.call_args_list];self.assertTrue(any(args[1]=='https' and args[-1]=='NovaBrowserURL' for args in values));self.assertTrue(any('--open-url "%1"' in str(args[-1]) for args in values));self.assertFalse(any('UserChoice' in str(call.args) for call in create.call_args_list))

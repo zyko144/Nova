@@ -201,11 +201,14 @@ sealed class MediaWindow : Form
                     Add("Retour",()=>{ if(web.CanGoBack)web.GoBack();else Send(new {type="back-home"}); });
                 Add("Suivant",()=>{ if(web.CanGoForward)web.GoForward(); });
                 Add("Actualiser",()=>web.Reload());
+                if(!string.IsNullOrEmpty(e.ContextMenuTarget.SelectionText))Add("Copier la sélection",()=>Clipboard.SetText(e.ContextMenuTarget.SelectionText));
+                if(e.ContextMenuTarget.IsEditable)Add("Coller",()=>web.CoreWebView2.ExecuteScriptAsync("document.execCommand('paste')"));
                 menu.Items.Add(new ToolStripSeparator());
                 Add("Paramètres Nova",()=>Send(new {type="open-settings"}));
                 Add("Réglages du bloqueur",()=>{if(blockerId.Length>0)web.CoreWebView2.Navigate("chrome-extension://"+blockerId+"/dashboard.html");});
                 menu.Closed+=(_,_)=>menu.Dispose();menu.Show(web,e.Location);
             };
+            web.CoreWebView2.PermissionRequested+=(_,e)=>{if(e.PermissionKind==CoreWebView2PermissionKind.ClipboardRead){e.State=e.IsUserInitiated?CoreWebView2PermissionState.Allow:CoreWebView2PermissionState.Deny;e.SavesInProfile=false;}};
             web.CoreWebView2.ServerCertificateErrorDetected += (_, e) => e.Action = CoreWebView2ServerCertificateErrorAction.Cancel;
             web.CoreWebView2.ContainsFullScreenElementChanged += (_, _) => Send(new { type = "fullscreen", value = web.CoreWebView2.ContainsFullScreenElement });
             if (SafeUrl(initialUrl)) web.CoreWebView2.Navigate(initialUrl);

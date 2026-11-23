@@ -1,5 +1,14 @@
 # Historique
 
+## 3.8.0
+
+- Complétions de recherche par Groq, avec clé locale chiffrée et activation dans les paramètres.
+- Appels après pause de frappe, réponses courtes, cache mémoire borné, rejet des réponses périmées et repli local.
+- Suggestions affichées sans badge ni libellé technique.
+- Définition de Nova comme navigateur par défaut via les paramètres Windows et ouverture des liens dans l’instance active.
+- Copie sans demandes répétées et collage explicite ; lecture du presse-papiers non autorisée en arrière-plan.
+
+
 ## 3.7.1
 
 - Panneau d'importation défilant pour conserver toutes les actions accessibles dans une fenêtre compacte.

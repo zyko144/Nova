@@ -12,6 +12,13 @@ class FormBridge(QObject):
         if len(raw)>20000:return
         try:message=json.loads(raw)
         except ValueError:return
+        if isinstance(message,dict) and message.get('type')=='nova-search-suggest' and self.view.url().scheme()=='about' and self.view is self.browser.current():
+            query=str(message.get('query',''))[:160]
+            def received(value,items):
+                try:
+                    if self.view.url().scheme()=='about' and self.view is self.browser.current():self.view.page().runJavaScript('window.__novaAiSuggestions?.('+json.dumps(value)+','+json.dumps(items)+')')
+                except RuntimeError:pass
+            self.browser.ai.request('home',query,received);return
         origin=secure_origin(self.view.url().toString())
         if not origin or not isinstance(message,dict):return
         if message.get('type')=='nova-fill-request':self.browser.fill_credentials(self.view,str(message.get('username',''))[:254])
