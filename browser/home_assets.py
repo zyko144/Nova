@@ -51,4 +51,7 @@ def build_home(template,shortcuts,data):
     engine=prefs.get('search_engine','Google')
     if engine=='DuckDuckGo':result=result.replace('https://www.google.com/search','https://duckduckgo.com/')
     elif engine=='Bing':result=result.replace('https://www.google.com/search','https://www.bing.com/search')
+    options=''.join('<option value="'+escape(value,quote=True)+'">' for value in data.get('recent_searches',[])[:12])
+    result=result.replace('<input name="q"','<input list="nova-queries" autocomplete="on" name="q"').replace('</form>','</form><datalist id="nova-queries">'+options+'</datalist>')
+    css+=':root{color-scheme:dark}'
     return result.replace('</style>',css+'</style>')

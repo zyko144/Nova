@@ -1,8 +1,9 @@
 import sys, json, uuid, os
 from pathlib import Path
 from urllib.parse import quote_plus
-from PySide6.QtCore import QUrl, QStandardPaths, Qt, QTimer, QSize, QByteArray, QPoint
-from PySide6.QtGui import QAction, QKeySequence, QIcon, QPixmap, QPainter
+from PySide6.QtCore import QUrl, QStandardPaths, Qt, QTimer, QSize, QByteArray, QPoint,QLockFile
+from PySide6.QtNetwork import QLocalServer,QLocalSocket
+from PySide6.QtGui import QAction, QKeySequence, QIcon, QPixmap, QPainter,QColor,QPalette
 from PySide6.QtSvg import QSvgRenderer
 from PySide6.QtWidgets import (QApplication, QMainWindow, QTabWidget, QToolBar,
     QLineEdit, QMessageBox, QFileDialog, QInputDialog, QMenu, QWidget,
@@ -16,6 +17,12 @@ from ui import generated_icon,NovaTabBar,NovaInput,NovaMessage,ShortcutDialog
 from pages import InternalPage,SettingsPage,AccountPage,SyncClient
 from home_assets import canonical_url
 from updater import Updater
+from vault import Vault,secure_origin
+from form_bridge import install_bridge
+from ui import NovaDialog
+from suggestions import AddressSuggestions
+from PySide6.QtWidgets import QPushButton,QScrollArea
+import hashlib,time
 QMessageBox=NovaMessage
 QInputDialog=NovaInput
 
@@ -110,6 +117,9 @@ class Browser(QMainWindow):
         self.data.setdefault('hidden_shortcuts',[])
         self.data.setdefault('preferences',{'theme':'violet','tab_icons':True,'adblock':True,'webrtc_public':True})
         self.sync_client=SyncClient(self)
+        try:self.vault=Vault(self.root/'vault.dat')
+        except (OSError,ValueError):self.vault=None
+        self.last_emails={};self.capture_times={};self.credential_prompt=None
         self.profile = QWebEngineProfile(self.data['active'], self)
         folder = self.root / 'profiles' / self.data['active']
         self.profile.setPersistentStoragePath(str(folder / 'storage'))
@@ -118,6 +128,8 @@ class Browser(QMainWindow):
         self.profile.setPersistentCookiesPolicy(QWebEngineProfile.PersistentCookiesPolicy.AllowPersistentCookies)
         self.profile.downloadRequested.connect(self.download)
         self.tabs = QTabWidget()
+        self.tabs.setAutoFillBackground(True)
+        palette=self.tabs.palette();palette.setColor(QPalette.ColorRole.Window,QColor('#07060e'));self.tabs.setPalette(palette)
         self.tabs.setDocumentMode(True)
         self.tabs.setTabsClosable(True)
         self.tabs.setMovable(True)
@@ -126,7 +138,7 @@ class Browser(QMainWindow):
         self.tabs.tabBar().hide()
         self.setCentralWidget(self.tabs)
         chrome=QWidget(); chrome.setObjectName('chrome'); column=QVBoxLayout(chrome); column.setContentsMargins(0,0,0,0); column.setSpacing(0)
-        self.titlebar=TitleBar(self); row=QHBoxLayout(self.titlebar); row.setContentsMargins(14,0,8,0); row.setSpacing(8)
+        self.titlebar=TitleBar(self); row=QHBoxLayout(self.titlebar); row.setContentsMargins(14,0,0,0); row.setSpacing(0)
         logo=QLabel(); logo.setPixmap(icon('logo',40).pixmap(40,40)); row.addWidget(logo)
         self.top_tabs=NovaTabBar(); self.top_tabs.setDocumentMode(True); self.top_tabs.setTabsClosable(True); self.top_tabs.setMovable(True); self.top_tabs.setExpanding(False)
         self.top_tabs.currentChanged.connect(self.activate_tab)
@@ -134,12 +146,12 @@ class Browser(QMainWindow):
         self.top_tabs.tabMoved.connect(self.move_tab)
         row.addWidget(self.top_tabs)
         def button(name,callback,tip,width=42):
-            btn=QToolButton(); btn.setAutoRaise(True); btn.setIcon(icon(name)); btn.setIconSize(QSize(26,26)); btn.setFixedSize(width,36); btn.setToolTip(tip); btn.clicked.connect(callback); return btn
+            btn=QToolButton(); btn.setAutoRaise(True); btn.setCursor(Qt.CursorShape.ArrowCursor);btn.setIcon(icon(name)); btn.setIconSize(QSize(20,20)); btn.setFixedSize(width,54); btn.setToolTip(tip); btn.clicked.connect(callback); return btn
         row.addWidget(button('plus',lambda:self.new_tab(),'Nouvel onglet (Ctrl+T)'))
         row.addStretch()
         row.addWidget(button('min',self.showMinimized,'Réduire',48))
         row.addWidget(button('max',self.toggle_maximized,'Agrandir',48))
-        close=button('close',self.close,'Fermer',48); close.setObjectName('closeWindow'); row.addWidget(close)
+        close=button('close',self.close,'Fermer',52); close.setObjectName('closeWindow'); row.addWidget(close)
         column.addWidget(self.titlebar)
         self.bar=bar=QToolBar('Navigation'); bar.setMovable(False); bar.setIconSize(QSize(26,26)); bar.setFixedHeight(58)
         column.addWidget(bar); self.setMenuWidget(chrome); self.chrome=chrome
@@ -158,7 +170,7 @@ class Browser(QMainWindow):
         self.setStyleSheet(self.styleSheet()+'''QWidget#chrome,QWidget#titleBar{background:#080611}QToolBar{background:#100d1c;padding:4px 16px;spacing:16px;border-bottom:1px solid #21172e}QToolButton{padding:6px}QToolButton#closeWindow:hover{background:#b62b51}QTabBar::tab{background:transparent;min-width:170px;max-width:230px;padding:14px 20px;border:0;color:#b8abc9}QTabBar::tab:selected{background:#1a1429;border-top:0;border-top-left-radius:20px;border-top-right-radius:20px;color:#f8f1ff}QLineEdit{padding:10px 16px;border-radius:24px;min-width:200px;border:0;background:#080610}QTabWidget::pane{border:0}''')
         for action in bar.actions():
             widget=bar.widgetForAction(action)
-            if isinstance(widget,QToolButton): widget.setIconSize(QSize(28,28)); widget.setFixedSize(34,36);widget.setAutoRaise(True)
+            if isinstance(widget,QToolButton): widget.setIconSize(QSize(24,24)); widget.setFixedSize(34,36);widget.setAutoRaise(True);widget.setCursor(Qt.CursorShape.ArrowCursor)
         self.setStyleSheet(self.styleSheet()+'''QTabBar::tab{min-width:155px;max-width:215px;padding:9px 17px;margin:3px 0;border:1px solid transparent;border-radius:14px;font-size:13px}QTabBar::tab:selected{border:1px solid #2b203d;border-radius:14px;background:#1b142a}QToolBar{spacing:12px;padding:3px 14px}QLineEdit{font-size:14px;padding:7px 12px;border:1px solid #151020;border-radius:19px}''')
         self.top_tabs.setFont(__import__('PySide6.QtGui',fromlist=['QFont']).QFont('Segoe UI',11))
         self.download_records=[]
@@ -168,6 +180,7 @@ class Browser(QMainWindow):
         self.new_tab()
         self.update_tab_style()
         self.updater=Updater(self)
+        self.address_suggestions=AddressSuggestions(self)
     def save(self):
         temp=self.datafile.with_suffix('.tmp'); temp.write_text(json.dumps(self.data, ensure_ascii=False, indent=2), encoding='utf-8'); temp.replace(self.datafile)
     def current(self): return self.tabs.currentWidget()
@@ -192,12 +205,16 @@ class Browser(QMainWindow):
         elif command=='fullscreen':self.fullscreen(not self.isFullScreen())
         elif command=='exit-fullscreen' and self.isFullScreen():self.fullscreen(False)
     def resolve(self,value):
+        if value.strip().lower() in ('youtube','yt'):return QUrl('https://www.youtube.com/')
+        if value.strip().lower().startswith(('yt ','youtube ')):return QUrl('https://www.youtube.com/results?search_query='+quote_plus(value.strip().split(' ',1)[1]))
         if value.strip().startswith('nova://'):return QUrl(value.strip())
         result=destination(value)
         if result.host()=='www.google.com' and result.path()=='/search':
             engine=self.data.get('preferences',{}).get('search_engine','Google')
             if engine=='DuckDuckGo':return QUrl('https://duckduckgo.com/?q='+quote_plus(value.strip()))
             if engine=='Bing':return QUrl('https://www.bing.com/search?q='+quote_plus(value.strip()))
+        if result.host()=='www.google.com' and result.path()=='/search':
+            searches=self.data.setdefault('recent_searches',[]);self.data['recent_searches']=([value.strip()]+[x for x in searches if x!=value.strip()])[:30];self.save()
         return result
     def apply_theme(self):
         black=self.data.get('preferences',{}).get('theme')=='black'
@@ -218,6 +235,7 @@ class Browser(QMainWindow):
     def decorate_tab(self,index):
         close=QToolButton(self.top_tabs);close.setIcon(icon('close',22));close.setIconSize(QSize(20,20));close.setFixedSize(26,26);close.setAutoRaise(True)
         close.setStyleSheet('QToolButton{background:transparent;border:0;padding:0;border-radius:8px}QToolButton:hover{background:rgba(150,100,200,25)}')
+        close.setCursor(Qt.CursorShape.ArrowCursor)
         close.clicked.connect(lambda:self.close_tab(self.top_tabs.tabAt(close.mapTo(self.top_tabs,close.rect().center()))))
         self.top_tabs.setTabButton(index,QTabBar.ButtonPosition.RightSide,close)
     def add_internal(self,view,name,ico):
@@ -272,6 +290,7 @@ class Browser(QMainWindow):
     def toggle_maximized(self): self.showNormal() if self.isMaximized() else self.showMaximized()
     def resizeEvent(self,event):
         super().resizeEvent(event)
+        if hasattr(self,'top_tabs'):self.top_tabs.updateGeometry()
         if hasattr(self,'resize_grip'): self.resize_grip.move(self.width()-18,self.height()-18)
     def fullscreen(self,on):
         self.chrome.setVisible(not on)
@@ -313,6 +332,8 @@ class Browser(QMainWindow):
         view.fullscreenChanged.connect(self.fullscreen)
         view.newTabRequested.connect(lambda value:self.new_tab(QUrl(value)))
         view.settingsRequested.connect(self.open_settings)
+        view.credentialCaptured.connect(lambda payload:self.capture_credentials(view,payload))
+        view.fillRequested.connect(lambda username:self.fill_credentials(view,username))
         view.backRequested.connect(lambda:self.restore_previous(view))
         view.shortcutRequested.connect(lambda command:self.media_shortcut(view,command))
         view.readyChanged.connect(lambda:view.send('focus') if self.current() is view and not self.address.hasFocus() else None)
@@ -359,7 +380,8 @@ class Browser(QMainWindow):
     def downloads_menu(self):
         QMessageBox.information(self,'Téléchargements','\n'.join(self.download_records[-15:]) or 'Aucun téléchargement dans cette session.')
     def new_tab(self, url=None):
-        view=NovaWebView(self); page=Page(self.profile,self); view.setPage(page)
+        view=NovaWebView(self); page=Page(self.profile,self);page.setBackgroundColor(QColor('#07060e')); view.setPage(page)
+        install_bridge(self,view)
         settings=page.settings()
         settings.setAttribute(QWebEngineSettings.WebAttribute.LocalContentCanAccessFileUrls, False)
         settings.setAttribute(QWebEngineSettings.WebAttribute.LocalContentCanAccessRemoteUrls, False)
@@ -392,6 +414,9 @@ class Browser(QMainWindow):
     def close_tab(self,index):
         if not 0<=index<self.tabs.count():return
         view=self.tabs.widget(index)
+        # Keep the stack populated before removing its last native surface.
+        if self.tabs.count()==1:self.new_tab()
+        view.hide()
         self.top_tabs.blockSignals(True); self.top_tabs.removeTab(index); self.top_tabs.blockSignals(False)
         self.tabs.removeTab(index)
         if isinstance(view,MediaView):
@@ -410,6 +435,59 @@ class Browser(QMainWindow):
         if index>=0:
             value=image if not image.isNull() else icon('logo')
             self.tabs.setTabIcon(index,value);self.top_tabs.setTabIcon(index,value)
+    def capture_credentials(self,view,payload):
+        if self.vault is None or not isinstance(payload,dict):return
+        origin=secure_origin(view.url().toString())
+        if not origin:return
+        username=str(payload.get('username',''))[:254].strip();password=payload.get('password','')
+        if not isinstance(password,str) or len(password)>4096:return
+        prefs=self.data['preferences']
+        if username:
+            self.last_emails[origin]=username
+            if prefs.get('remember_emails',True):
+                try:self.vault.remember_email(username)
+                except OSError:pass
+        else:username=self.last_emails.get(origin,'')
+        if not password or not username or not prefs.get('save_passwords',True):return
+        if any(record['username']==username and record['password']==password for record in self.vault.for_site(origin)):return
+        fingerprint=hashlib.sha256((origin+'\0'+username+'\0'+password).encode()).hexdigest()
+        if time.monotonic()-self.capture_times.get(fingerprint,0)<30 or self.credential_prompt is not None:return
+        self.capture_times={fingerprint:time.monotonic()}
+        dialog=NovaDialog(self,'Enregistrer sur Nova ?',origin+'\n'+username+'\nLe mot de passe sera protégé par votre session Windows, uniquement sur cet appareil.')
+        self.credential_prompt=dialog
+        secret={'value':password}
+        row=QHBoxLayout();row.addStretch();no=QPushButton('Pas maintenant');no.clicked.connect(dialog.reject);row.addWidget(no)
+        yes=QPushButton('Enregistrer sur Nova');yes.setObjectName('primary');row.addWidget(yes);dialog.body.addLayout(row)
+        def save():
+            try:self.vault.put(origin,username,secret['value'])
+            except (OSError,ValueError):QMessageBox.information(self,'Coffre indisponible','Nova n’a pas enregistré le mot de passe. Vérifiez la protection de votre session Windows.')
+            dialog.accept()
+        def finished(*args):secret.clear();self.credential_prompt=None;dialog.deleteLater()
+        yes.clicked.connect(save);dialog.finished.connect(finished);dialog.setModal(False);dialog.show()
+    def fill_credentials(self,view,username=''):
+        if self.vault is None:return
+        origin=secure_origin(view.url().toString())
+        if not origin:return
+        records=self.vault.for_site(origin);prefs=self.data['preferences'];record=next((x for x in records if x['username']==username),None)
+        if record is None and not username and len(records)==1:record=records[0]
+        payload={'origin':origin,'emails':self.vault.data['emails'] if prefs.get('remember_emails',True) else []}
+        if record and prefs.get('autofill',True):payload.update(username=record['username'],password=record['password'])
+        if isinstance(view,MediaView):view.send('autofill',json.dumps(payload))
+        elif isinstance(view,QWebEngineView):view.page().runJavaScript('window.__novaFill?.('+json.dumps(payload)+')')
+    def open_vault(self):
+        dialog=NovaDialog(self,'Identifiants enregistrés','Stockage local protégé par Windows. Les mots de passe ne sont pas synchronisés.')
+        dialog.setMinimumWidth(540)
+        if self.vault is None:dialog.body.addWidget(QLabel('Le coffre Windows est indisponible.'))
+        else:
+            scroll=QScrollArea();scroll.setWidgetResizable(True);scroll.setMaximumHeight(330);scroll.setMinimumHeight(120);scroll.setStyleSheet('QScrollArea{border:0;background:transparent}');content=QWidget();items=QVBoxLayout(content)
+            for record in list(self.vault.data['credentials']):
+                row=QHBoxLayout();label=QLabel(record['origin']+'\n'+record['username']);label.setTextFormat(Qt.TextFormat.PlainText);row.addWidget(label);row.addStretch();button=QPushButton('Supprimer');row.addWidget(button);items.addLayout(row)
+                def remove(checked=False,r=record,b=button):
+                    if QMessageBox.question(dialog,'Supprimer cet identifiant ?',r['origin']+'\n'+r['username'])==QMessageBox.StandardButton.Yes:self.vault.delete(r['origin'],r['username']);b.setEnabled(False);b.setText('Supprimé')
+                button.clicked.connect(remove)
+            if not self.vault.data['credentials']:items.addWidget(QLabel('Aucun identifiant enregistré.'))
+            scroll.setWidget(content);dialog.body.addWidget(scroll)
+        dialog.buttons('Fermer','Annuler');dialog.exec()
     def page_url_changed(self,view):
         if view is self.current():self.sync()
     def sync(self,*args,force=False):
@@ -484,7 +562,26 @@ class Browser(QMainWindow):
 
 if __name__=='__main__':
     app=QApplication(sys.argv); app.setApplicationName('NovaBrowserSmoke-'+uuid.uuid4().hex if '--smoke-test' in sys.argv else 'NovaBrowser'); app.setOrganizationName('NovaBrowser')
+    local_server=None
+    if '--smoke-test' not in sys.argv:
+        profile_root=Path(QStandardPaths.writableLocation(QStandardPaths.AppLocalDataLocation));profile_root.mkdir(parents=True,exist_ok=True)
+        instance_name='NovaBrowser-'+hashlib.sha256(str(profile_root).encode()).hexdigest()[:16]
+        instance_lock=QLockFile(str(profile_root/'browser.lock'))
+        if not instance_lock.tryLock(0):
+            existing=QLocalSocket();existing.connectToServer(instance_name)
+            if existing.waitForConnected(500):existing.write(b'activate');existing.waitForBytesWritten(500)
+            sys.exit(0)
+        local_server=QLocalServer(app);local_server.setSocketOptions(QLocalServer.SocketOption.UserAccessOption);local_server.removeServer(instance_name);local_server.listen(instance_name)
+        app.aboutToQuit.connect(instance_lock.unlock)
     window=Browser()
+    if local_server is not None:
+        def activate_existing():
+            connection=local_server.nextPendingConnection()
+            if connection:
+                connection.close();connection.deleteLater()
+            if window.isMinimized():window.showNormal()
+            window.raise_();window.activateWindow()
+        local_server.newConnection.connect(activate_existing)
     if '--smoke-test' in sys.argv:window.setAttribute(Qt.WidgetAttribute.WA_DontShowOnScreen,True)
     window.show()
     if '--smoke-test' in sys.argv:

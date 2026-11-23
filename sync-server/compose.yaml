@@ -2,6 +2,11 @@ services:
   api:
     build: .
     restart: unless-stopped
+    environment:
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      NOVA_PUBLIC_ORIGIN: https://${NOVA_DOMAIN}
+      GOOGLE_DESKTOP_CLIENT_ID: ${GOOGLE_DESKTOP_CLIENT_ID:-54433304112-ok8du14eau4atn121prcek88mv21qblf.apps.googleusercontent.com}
     volumes:
       - nova-data:/data
     expose:

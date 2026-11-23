@@ -5,6 +5,8 @@ Navigateur Windows expérimental avec une interface sombre et compacte, des prof
 - Interface native Python/PySide6 et Qt WebEngine.
 - Moteur vidéo Edge WebView2 intégré, avec uBlock Origin Lite.
 - Paramètres natifs, raccourcis personnalisables et thèmes violet / noir profond.
+- Onglets adaptatifs, suggestions locales et coffre de saisie chiffré par Windows DPAPI.
+- Connexion Google Desktop via navigateur système et PKCE ; configuration dans `sync-server/GOOGLE-SETUP.txt`.
 - Serveur Nova Sync auto-hébergeable pour les favoris, l'historique, les raccourcis, les préférences et les listes d'onglets.
 - Mises à jour depuis les GitHub Releases de ce dépôt, vérification SHA-256 et installation après confirmation.
 

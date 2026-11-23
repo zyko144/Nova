@@ -25,6 +25,8 @@ class MediaView(QWidget):
     iconChanged = Signal(object)
     backRequested = Signal()
     shortcutRequested = Signal(str)
+    credentialCaptured = Signal(object)
+    fillRequested = Signal(str)
     def __init__(self,url,profile,parent=None):
         super().__init__(parent)
         self._url=QUrl(url); self._title='Vidéo'; self.buffer=b''; self.ready=False
@@ -83,6 +85,12 @@ class MediaView(QWidget):
             elif kind=='open-settings':self.settingsRequested.emit()
             elif kind=='back-home':self.backRequested.emit()
             elif kind=='shortcut':self.shortcutRequested.emit(str(value))
+            elif kind=='credential-capture':
+                from vault import secure_origin
+                if event.get('origin')==secure_origin(self._url.toString()):self.credentialCaptured.emit(event.get('data',{}))
+            elif kind=='fill-request':
+                from vault import secure_origin
+                if event.get('origin')==secure_origin(self._url.toString()):self.fillRequested.emit(str(event.get('username',''))[:254])
             elif kind=='probe': self.diagnostic.emit(value)
             elif kind=='adblock':
                 self.adblock_enabled=bool(event.get('enabled')); self.adblock_name=event.get('name','')

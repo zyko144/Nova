@@ -1,5 +1,14 @@
 # Historique
 
+## 3.3.0
+
+- Correction du focus clavier YouTube et des champs WebView2.
+- Onglets adaptatifs, fermeture sans fond blanc, icônes de fenêtre réduites et curseur standard.
+- Coffre local chiffré par Windows, enregistrement sur confirmation et remplissage par site HTTPS.
+- Suggestions locales et recherche YouTube avec « yt recherche ».
+- Connexion Google Desktop avec PKCE ; serveur Nova Sync facultatif.
+- Prévention des ouvertures simultanées du même profil.
+
 ## 3.2.1
 
 - Correction de la lecture des en-têtes GitHub avec Qt 6.12.

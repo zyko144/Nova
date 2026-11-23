@@ -7,11 +7,12 @@ from PySide6.QtWidgets import (QWidget,QFrame,QLabel,QPushButton,QLineEdit,QVBox
     QGridLayout,QListWidget,QListWidgetItem,QStackedWidget,QScrollArea,QCheckBox,QComboBox)
 from ui import generated_icon,ASSETS,NovaMessage
 from version import VERSION
+from google_flow import GoogleFlow
 
 PAGE_STYLE='''QWidget#novaPage{background:#050408;color:#eee8f6}QFrame#sidebar{background:#08060e;border-right:1px solid #2b183b}QFrame#card{background:#100c18;border:1px solid #2c1d3d;border-radius:18px}QLabel{color:#bbadcb;background:transparent;font-size:13px}QLabel#pageTitle{font-size:27px;color:#faf4ff;font-weight:600}QLabel#cardTitle{font-size:18px;color:#f0e7fb;font-weight:600}QLabel#brand{font-size:16px;color:#f3eaff;font-weight:600}QPushButton{background:#201030;border:1px solid #44205f;border-radius:11px;color:#e3d0fa;padding:11px 17px;font-size:13px}QPushButton:hover{background:#301647;border-color:#8651b6}QPushButton#primary{background:#8225df;border:0;color:white}QPushButton#theme{background:#09050f;border:1px solid #3d2257;min-height:50px}QPushButton#theme:checked{border:2px solid #a256ff;background:#241039}QLineEdit,QComboBox{background:#08050d;color:#eee4fa;border:1px solid #342046;border-radius:12px;padding:11px;font-size:13px}QLineEdit:focus{border-color:#a050ef}QListWidget{background:transparent;border:0;outline:0;color:#bdb0d0;font-size:14px}QListWidget::item{padding:13px 12px;margin:3px 0;border-radius:13px}QListWidget::item:selected{background:#291343;color:white;border:1px solid #8546dc}QListWidget::item:hover:!selected{background:#15101e}QScrollArea{background:transparent;border:0}QScrollBar:vertical{width:7px;background:transparent;margin:4px}QScrollBar::handle:vertical{background:#3a2551;border-radius:3px;min-height:40px}QScrollBar::add-line:vertical,QScrollBar::sub-line:vertical{height:0}QCheckBox{color:#d9cce8;font-size:13px;spacing:12px}QCheckBox::indicator{width:38px;height:20px;border-radius:10px;background:#342c43;border:0}QCheckBox::indicator:checked{background:#8b2af4;border:1px solid #b281ff}QCheckBox::indicator:unchecked{background:#302a3b;border:1px solid #4a405b}'''
 
 def text(value,style=None):
-    label=QLabel(value);label.setWordWrap(True)
+    label=QLabel(value);label.setTextFormat(Qt.TextFormat.PlainText);label.setWordWrap(True)
     if style:label.setObjectName(style)
     return label
 
@@ -59,17 +60,23 @@ class SyncClient(QWidget):
     signedIn=Signal(str)
     changed=Signal()
     def __init__(self,browser):
-        super().__init__(browser);self.browser=browser;self.network=QNetworkAccessManager(self);self.token='';self.email='';self.endpoint='';self.revision=0;self.busy=False;self.remote_tabs=[]
+        super().__init__(browser);self.browser=browser;self.network=QNetworkAccessManager(self);self.token='';self.email='';self.endpoint='';self.auth_endpoint='';self.revision=0;self.busy=False;self.remote_tabs=[]
         self.timer=QTimer(self);self.timer.setInterval(120000);self.timer.timeout.connect(self.synchronize)
-    def request(self,path,payload,callback):
-        if self.busy:self.statusChanged.emit('Une opération est déjà en cours.');return
+        self.google=GoogleFlow(self)
+    def request(self,path,payload,callback,failed=None):
+        if self.busy:
+            self.statusChanged.emit('Une opération est déjà en cours.')
+            if failed:failed()
+            return
         url=QUrl(self.endpoint)
         if url.userName() or url.password() or url.hasQuery() or url.hasFragment() or (url.scheme()!='https' and not (url.scheme()=='http' and url.host() in ('127.0.0.1','localhost','::1'))):
-            self.statusChanged.emit('Adresse du serveur invalide. Utilisez HTTPS, ou HTTP sur localhost pour un essai.');return
+            self.statusChanged.emit('Adresse du serveur invalide. Utilisez HTTPS, ou HTTP sur localhost pour un essai.')
+            if failed:failed()
+            return
         self.busy=True
         req=QNetworkRequest(QUrl(self.endpoint.rstrip('/')+path));req.setHeader(QNetworkRequest.KnownHeaders.ContentTypeHeader,'application/json');req.setTransferTimeout(20000)
         req.setAttribute(QNetworkRequest.Attribute.RedirectPolicyAttribute,QNetworkRequest.RedirectPolicy.ManualRedirectPolicy)
-        if self.token:req.setRawHeader(b'Authorization',('Bearer '+self.token).encode())
+        if self.token and self.endpoint==self.auth_endpoint:req.setRawHeader(b'Authorization',('Bearer '+self.token).encode())
         reply=self.network.get(req) if payload is None else self.network.post(req,QByteArray(json.dumps(payload).encode()))
         def done():
             self.busy=False
@@ -78,15 +85,16 @@ class SyncClient(QWidget):
             except (ValueError,UnicodeError):data={}
             if not status or not 200<=int(status)<300:
                 self.statusChanged.emit(data.get('error') or 'Connexion impossible. Vérifiez le serveur et son certificat HTTPS.')
+                if failed:failed()
             else:callback(data)
             reply.deleteLater()
         reply.finished.connect(done)
     def login(self,endpoint,email,password,register=False):
         self.endpoint=endpoint.strip().rstrip('/');self.statusChanged.emit('Création du compte…' if register else 'Connexion…')
-        def accepted(data):
-            self.token=data['token'];self.email=data['email'];self.browser.data['sync_endpoint']=self.endpoint;self.browser.save()
-            self.signedIn.emit(self.email);self.statusChanged.emit('Connecté. Prêt à synchroniser.');self.timer.start();self.synchronize()
-        self.request('/v1/register' if register else '/v1/login',{'email':email,'password':password},accepted)
+        self.request('/v1/register' if register else '/v1/login',{'email':email,'password':password},self.accept_session)
+    def accept_session(self,data):
+        self.token=data['token'];self.email=data['email'];self.auth_endpoint=self.endpoint;self.browser.data['sync_endpoint']=self.endpoint;self.browser.save()
+        self.signedIn.emit(self.email);self.statusChanged.emit('Connecté. Prêt à synchroniser.');self.timer.start();self.synchronize()
     def synchronize(self):
         if not self.token:self.statusChanged.emit('Connectez-vous d’abord à votre compte Nova.');return
         if self.busy:return
@@ -121,8 +129,8 @@ class SyncClient(QWidget):
             self.request('/v1/snapshot',{'revision':self.revision,'data':merged},pushed)
         self.request('/v1/snapshot',None,pulled)
     def logout(self):
-        def done(data):self.token='';self.email='';self.timer.stop();self.signedIn.emit('');self.statusChanged.emit('Déconnecté. Les données locales restent disponibles.')
-        if self.token:self.request('/v1/logout',{},done)
+        if self.token and self.endpoint==self.auth_endpoint:self.request('/v1/logout',{},lambda data:None)
+        self.google.cancel();self.token='';self.email='';self.auth_endpoint='';self.timer.stop();self.signedIn.emit('');self.statusChanged.emit('Déconnecté. Les données locales restent disponibles.')
     def restore_tabs(self):
         for entry in self.remote_tabs[:30]:
             url=QUrl(entry.get('url',''))
@@ -142,6 +150,8 @@ class AccountPage(InternalPage):
         self.confirm=QLineEdit();self.confirm.setEchoMode(QLineEdit.EchoMode.Password);self.confirm.setPlaceholderText('Confirmer le mot de passe pour créer un compte')
         for title,widget in [('Serveur Nova Sync',self.endpoint),('Adresse e-mail',self.email),('Mot de passe',self.password),('Confirmation pour une inscription',self.confirm)]:form.addWidget(text(title));form.addWidget(widget)
         buttons=QHBoxLayout();action(buttons,'Se connecter',lambda:self.authenticate(False),True);action(buttons,'Créer un compte',lambda:self.authenticate(True));form.addLayout(buttons)
+        action(form,'Continuer avec Google',lambda:browser.sync_client.google.start(self.endpoint.text()))
+        form.addWidget(text('Google s’ouvre dans le navigateur système. Sans serveur, la connexion reste locale ; avec un serveur Nova, elle peut activer la synchronisation. Aucun mot de passe Google n’est demandé par Nova.'))
         form.addWidget(text('Aucun serveur n’est configuré par défaut. Le dossier NovaSync-server contient le serveur et les instructions d’hébergement.'))
         frame,right=card('Synchronisation','Favoris · historique · raccourcis · onglets');row.addWidget(frame,1)
         self.identity=text('Non connecté','cardTitle');right.addWidget(self.identity)
@@ -160,7 +170,7 @@ class AccountPage(InternalPage):
         self.browser.sync_client.login(self.endpoint.text(),self.email.text(),self.password.text(),register)
 
 class SettingsPage(InternalPage):
-    sections=[('Apparence','settings'),('Onglets','plus'),('Confidentialité et sécurité','vpn'),('VPN','vpn'),('Téléchargements','download'),('Extensions et publicités','extensions'),('Moteur de recherche','search'),('Optimiser le navigateur','video'),('Compte et synchronisation','profile'),('À propos','home')]
+    sections=[('Apparence','settings'),('Onglets','plus'),('Confidentialité et sécurité','vpn'),('VPN','vpn'),('Téléchargements','download'),('Extensions et publicités','extensions'),('Moteur de recherche','search'),('Optimiser le navigateur','video'),('Compte et synchronisation','profile'),('À propos','home'),('Identifiants et saisie','profile')]
     def __init__(self,browser):
         super().__init__('settings','Paramètres',browser)
         root=QHBoxLayout(self);root.setContentsMargins(0,0,0,0);root.setSpacing(0)
@@ -253,6 +263,13 @@ class SettingsPage(InternalPage):
             c.addWidget(text('La mise en veille concerne les onglets classiques : les pages peuvent se recharger à leur réactivation. Les lecteurs vidéo restent actifs pour préserver les directs. Le cache disque est plafonné à 256 Mio.'))
         elif index==8:
             frame,c=card('Compte et synchronisation','Retrouvez vos favoris, raccourcis et onglets sur vos appareils.');layout.addWidget(frame);action(c,'Ouvrir mon compte Nova',b.open_account,True);c.addWidget(text('Nécessite un serveur Nova Sync à héberger. Aucun serveur public n’est configuré par défaut.'))
+        elif index==10:
+            frame,c=card('Identifiants et saisie','Un coffre local, protégé par votre session Windows.');layout.addWidget(frame)
+            self.toggle(c,'Proposer d’enregistrer les mots de passe','save_passwords',True)
+            self.toggle(c,'Remplir les identifiants enregistrés sur le même site','autofill',True)
+            self.toggle(c,'Retenir les adresses e-mail utilisées dans les formulaires','remember_emails',True)
+            action(c,'Gérer les identifiants',b.open_vault)
+            c.addWidget(text('Nova demande votre accord avant chaque nouvel enregistrement de mot de passe. Le remplissage est limité au même site HTTPS. Le coffre n’est jamais envoyé à Nova Sync.'))
         else:
             frame,c=card('Nova Browser '+VERSION,'Qt WebEngine + WebView2');layout.addWidget(frame)
             c.addWidget(text('Interface Nova, moteur vidéo compatible et uBlock Origin Lite. Version de développement non auditée.'))

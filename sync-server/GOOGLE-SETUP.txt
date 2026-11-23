@@ -1,0 +1,30 @@
+CONNEXION GOOGLE — APPLICATION DE BUREAU
+
+Le client public de bureau fourni est configuré dans Nova. Aucun secret Google
+n'est embarqué. La connexion utilise le navigateur système, PKCE S256, un nonce
+et un retour local sur 127.0.0.1 à port aléatoire.
+
+Dans Google Cloud : conserver le type Application de bureau, configurer le
+consentement OAuth (nom et support) et ajouter les utilisateurs de test tant
+que le projet reste en mode test. Finaliser les exigences Google avant une
+ouverture publique. Cliquer ensuite Continuer avec Google dans le compte Nova.
+Sans serveur, la connexion reste locale : aucune synchronisation cloud.
+
+Pour plusieurs appareils : héberger Nova Sync derrière HTTPS avec le compose
+fourni, renseigner NOVA_DOMAIN et conserver GOOGLE_DESKTOP_CLIENT_ID identique
+au client public de browser/version.py. Aucun secret de bureau n'est demandé.
+Renseigner ensuite l'adresse HTTPS du serveur dans Nova > Compte.
+
+Le serveur valide signature, audience, expiration, e-mail vérifié et nonce.
+Les défis sont à usage unique et les jetons Google ne sont pas stockés.
+Pour lier Google à un compte Nova existant, se connecter d'abord par mot de
+passe Nova. Aucun lien implicite sur la seule base d'une adresse e-mail.
+
+Le coffre de mots de passe reste local, chiffré par Windows DPAPI ; il n'est
+pas envoyé au serveur. Ne jamais publier un secret OAuth ; révoquer ceux qui
+ont été divulgués. Les tests utilisent des identités fictives : valider aussi
+une connexion réelle avec le consentement Google Cloud.
+
+L'ancien trajet Web reste optionnel côté serveur via GOOGLE_CLIENT_ID,
+GOOGLE_CLIENT_SECRET et NOVA_PUBLIC_ORIGIN ; son secret reste sur le serveur.
+Documentation : https://developers.google.com/identity/protocols/oauth2/native-app

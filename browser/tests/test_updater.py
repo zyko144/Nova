@@ -15,7 +15,7 @@ class UpdateTest(unittest.TestCase):
             finished=Signal()
             def __init__(self,status):super().__init__();self.status=status
             def attribute(self,key):return self.status
-            def readAll(self):return QByteArray(b'{"tag_name":"v3.3.0","draft":false,"prerelease":false,"assets":[]}')
+            def readAll(self):return QByteArray(b'{"tag_name":"v99.0.0","draft":false,"prerelease":false,"assets":[]}')
             def rawHeader(self,key):
                 if not isinstance(key,str):raise TypeError('Qt 6.12 requires a string header name')
                 return QByteArray(b'"test-etag"')
@@ -24,13 +24,13 @@ class UpdateTest(unittest.TestCase):
                 self.reply=Reply(304 if request.hasRawHeader('If-None-Match') else 200)
                 QTimer.singleShot(0,self.reply.finished.emit);return self.reply
         updater.network=Network();updater.check();app.processEvents()
-        self.assertEqual(updater.available['tag_name'],'v3.3.0');self.assertEqual(updater.etag,b'"test-etag"');self.assertEqual(len(notifications),1)
-        updater.check();app.processEvents();self.assertEqual(updater.available['tag_name'],'v3.3.0');self.assertFalse(updater.busy)
+        self.assertEqual(updater.available['tag_name'],'v99.0.0');self.assertEqual(updater.etag,b'"test-etag"');self.assertEqual(len(notifications),1)
+        updater.check();app.processEvents();self.assertEqual(updater.available['tag_name'],'v99.0.0');self.assertFalse(updater.busy)
         browser.close();app.processEvents()
     def test_versions_and_verified_assets(self):
-        self.assertGreater(version_tuple('v3.3.0'),version_tuple('3.2.0'))
+        self.assertGreater(version_tuple('v99.0.0'),version_tuple('3.2.0'))
         self.assertIsNone(version_tuple('../../3.3.0'))
-        release={'tag_name':'v3.3.0','assets':[{'name':'NovaBrowser-Windows-x64.zip','size':100,'digest':'sha256:'+'a'*64,'browser_download_url':'https://github.com/zyko144/Nova/releases/download/v3.3.0/NovaBrowser-Windows-x64.zip'}]}
+        release={'tag_name':'v99.0.0','assets':[{'name':'NovaBrowser-Windows-x64.zip','size':100,'digest':'sha256:'+'a'*64,'browser_download_url':'https://github.com/zyko144/Nova/releases/download/v99.0.0/NovaBrowser-Windows-x64.zip'}]}
         self.assertIsNotNone(release_asset(release))
         for mutation in [lambda r:r['assets'][0].update(digest=''),lambda r:r['assets'][0].update(browser_download_url='https://evil.example/update.zip'),lambda r:r.update(prerelease=True),lambda r:r['assets'][0].update(size=-1)]:
             bad=copy.deepcopy(release);mutation(bad);self.assertIsNone(release_asset(bad))

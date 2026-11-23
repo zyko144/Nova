@@ -1,5 +1,7 @@
 """Nova Sync: self-hosted account API. Run behind HTTPS (see deployment files)."""
 import argparse, base64, hashlib, hmac, json, os, re, secrets, sqlite3, threading, time
+import google_login
+import google_desktop
 from collections import defaultdict, deque
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -17,8 +19,10 @@ class Store:
             CREATE TABLE IF NOT EXISTS users(id TEXT PRIMARY KEY,email TEXT UNIQUE NOT NULL,salt TEXT NOT NULL,password TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS sessions(token TEXT PRIMARY KEY,user_id TEXT NOT NULL,expires INTEGER NOT NULL);
             CREATE TABLE IF NOT EXISTS snapshots(user_id TEXT PRIMARY KEY,revision INTEGER NOT NULL,data TEXT NOT NULL);
+            CREATE TABLE IF NOT EXISTS identities(provider TEXT NOT NULL,subject TEXT NOT NULL,user_id TEXT NOT NULL,PRIMARY KEY(provider,subject));
             ''')
         self.rates=defaultdict(deque); self.rate_lock=threading.Lock()
+        self.oauth_states={};self.oauth_codes={};self.oauth_desktop={};self.oauth_lock=threading.Lock()
     @contextmanager
     def connect(self):
         db=sqlite3.connect(self.path,timeout=10)
@@ -88,11 +92,18 @@ class Handler(BaseHTTPRequestHandler):
         with self.server.store.connect() as db:
             row=db.execute('SELECT user_id FROM sessions WHERE token=? AND expires>?',(token_hash(header[7:]),int(time.time()))).fetchone()
         return row[0] if row else None
+    def issue_token(self,user_id):
+        token=secrets.token_urlsafe(48)
+        with self.server.store.connect() as db:
+            db.execute('DELETE FROM sessions WHERE expires<?',(int(time.time()),))
+            db.execute('INSERT INTO sessions VALUES(?,?,?)',(token_hash(token),user_id,int(time.time())+TOKEN_LIFETIME))
+        return token
     def snapshot(self,user_id):
         with self.server.store.connect() as db:
             row=db.execute('SELECT revision,data FROM snapshots WHERE user_id=?',(user_id,)).fetchone()
         return {'revision':row[0],'data':json.loads(row[1])} if row else {'revision':0,'data':clean_snapshot({})}
     def do_GET(self):
+        if google_login.callback(self):return
         if self.path=='/health':self.reply(200,{'status':'ok','service':'Nova Sync'});return
         if self.path!='/v1/snapshot':self.reply(404,{'error':'Route inconnue'});return
         user_id=self.user()
@@ -103,6 +114,8 @@ class Handler(BaseHTTPRequestHandler):
         except (ValueError,UnicodeError,TypeError):self.reply(400,{'error':'Requête invalide'})
         except sqlite3.Error:self.reply(503,{'error':'Stockage temporairement indisponible'})
     def post(self):
+        if google_desktop.post(self):return
+        if google_login.post(self):return
         if self.path in ('/v1/register','/v1/login'):
             if not self.server.store.permit(self.client_address[0]):self.reply(429,{'error':'Trop de tentatives. Réessayez dans 10 minutes.'});return
             data=self.body();email=data.get('email','');password=data.get('password','')

@@ -20,6 +20,9 @@ sealed class MediaWindow : Form
     [DllImport("user32.dll")] static extern int SetWindowLong(IntPtr h, int index, int value);
     [DllImport("user32.dll")] static extern bool GetClientRect(IntPtr h, out RECT rect);
     [DllImport("user32.dll")] static extern bool IsWindow(IntPtr h);
+    [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr h,out uint process);
+    [DllImport("kernel32.dll")] static extern uint GetCurrentThreadId();
+    [DllImport("user32.dll")] static extern bool AttachThreadInput(uint first,uint second,bool attach);
     [StructLayout(LayoutKind.Sequential)] struct RECT { public int Left, Top, Right, Bottom; }
     readonly WebView2 web = new() { Dock = DockStyle.Fill, DefaultBackgroundColor=Color.FromArgb(5,4,12) };
     readonly StreamWriter output = new(Console.OpenStandardOutput()) { AutoFlush = true };
@@ -30,6 +33,8 @@ sealed class MediaWindow : Form
     readonly bool noAdblock;
     string blockerId = "";
     CoreWebView2BrowserExtension? blocker;
+    uint parentThread,ownThread;
+    bool inputAttached;
     public MediaWindow(string[] args)
     {
         parent = new IntPtr(long.Parse(args[0])); profile = args[1]; initialUrl = args[2];
@@ -41,6 +46,8 @@ sealed class MediaWindow : Form
         Shown += async (_, _) => await Initialize();
         if (parent != IntPtr.Zero)
         {
+            parentThread=GetWindowThreadProcessId(parent,out _);ownThread=GetCurrentThreadId();
+            if(parentThread!=0 && parentThread!=ownThread)inputAttached=AttachThreadInput(ownThread,parentThread,true);
             SetParent(Handle, parent);
             SetWindowLong(Handle, -16, (GetWindowLong(Handle, -16) | 0x40000000) & ~unchecked((int)0x80000000));
             sizeTimer.Tick += (_, _) => {
@@ -52,6 +59,23 @@ sealed class MediaWindow : Form
             };
             sizeTimer.Start();
         }
+    }
+    protected override void OnFormClosed(FormClosedEventArgs e)
+    {
+        sizeTimer.Stop();
+        if(inputAttached)AttachThreadInput(ownThread,parentThread,false);
+        base.OnFormClosed(e);
+    }
+    protected override void WndProc(ref Message message)
+    {
+        const int WM_MOUSEACTIVATE=0x21;
+        if(message.Msg==WM_MOUSEACTIVATE) {
+            base.WndProc(ref message);
+            message.Result=new IntPtr(1);
+            if(web.CoreWebView2!=null)BeginInvoke((Action)(()=>web.Focus()));
+            return;
+        }
+        base.WndProc(ref message);
     }
     void Send(object value) { try { output.WriteLine(JsonSerializer.Serialize(value)); } catch { } }
     static bool SafeUrl(string url) => Uri.TryCreate(url, UriKind.Absolute, out var uri) && (uri.Scheme == "https" || uri.Scheme == "http");
@@ -88,9 +112,29 @@ sealed class MediaWindow : Form
                 else Send(new { type="adblock", enabled=false, name="Extension manquante" });
             }
             catch(Exception e) { Send(new { type="adblock", enabled=false, name=e.Message }); }
-            web.CoreWebView2.Settings.IsWebMessageEnabled = false;
+            web.CoreWebView2.Settings.IsWebMessageEnabled = true;
             web.CoreWebView2.Settings.AreHostObjectsAllowed = false;
             web.CoreWebView2.Settings.IsStatusBarEnabled = false;
+            web.CoreWebView2.Profile.IsGeneralAutofillEnabled=false;
+            web.CoreWebView2.Profile.IsPasswordAutosaveEnabled=false;
+            string formScript=Path.Combine(AppContext.BaseDirectory,"autofill.js");
+            if(File.Exists(formScript))await web.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(File.ReadAllText(formScript));
+            web.CoreWebView2.WebMessageReceived += (_,e)=>{
+                try {
+                    if(e.WebMessageAsJson.Length>20000)return;
+                    var page=new Uri(web.CoreWebView2.Source);var sender=new Uri(e.Source);
+                    if(page.Scheme!="https"||sender.GetLeftPart(UriPartial.Authority)!=page.GetLeftPart(UriPartial.Authority))return;
+                    using var document=JsonDocument.Parse(e.WebMessageAsJson);var root=document.RootElement;
+                    string type=root.GetProperty("type").GetString()??"";
+                    string username=root.TryGetProperty("username",out var user)?user.GetString()??"":"";
+                    if(username.Length>254)return;
+                    string origin=page.GetLeftPart(UriPartial.Authority);
+                    if(type=="nova-capture") {
+                        string password=root.TryGetProperty("password",out var pwd)?pwd.GetString()??"":"";
+                        if(password.Length<=4096)Send(new {type="credential-capture",origin,data=new {username,password}});
+                    } else if(type=="nova-fill-request")Send(new {type="fill-request",origin,username});
+                } catch { }
+            };
             web.CoreWebView2.NavigationStarting += (_, e) => { if (!SafeUrl(e.Uri) && e.Uri != "about:blank" && !(blockerId.Length>0 && e.Uri.StartsWith("chrome-extension://"+blockerId+"/"))) e.Cancel = true; };
             web.CoreWebView2.SourceChanged += (_, _) => Send(new { type = "url", value = web.Source.ToString() });
             web.CoreWebView2.DocumentTitleChanged += (_, _) => Send(new { type = "title", value = web.CoreWebView2.DocumentTitle });
@@ -161,6 +205,7 @@ sealed class MediaWindow : Form
                     else if (cmd == "forward" && web.CanGoForward) web.GoForward();
                     else if (cmd == "reload") web.Reload();
                     else if (cmd == "focus") web.Focus();
+                    else if (cmd == "autofill") _=FillForm(value);
                     else if (cmd == "adblock-settings" && blockerId.Length>0) web.CoreWebView2.Navigate("chrome-extension://"+blockerId+"/dashboard.html");
                     else if (cmd == "adblock-toggle" && blocker!=null) _=ToggleBlocker(value=="on");
                     else if (cmd == "close") Close();
@@ -169,6 +214,16 @@ sealed class MediaWindow : Form
             catch { }
         }
         if (!IsDisposed) try { BeginInvoke((Action)Close); } catch { }
+    }
+    async Task FillForm(string value)
+    {
+        try {
+            if(value.Length>20000)return;
+            using var document=JsonDocument.Parse(value);
+            var page=new Uri(web.CoreWebView2.Source);
+            if(page.Scheme!="https"||document.RootElement.GetProperty("origin").GetString()!=page.GetLeftPart(UriPartial.Authority))return;
+            await web.ExecuteScriptAsync("window.__novaFill?.("+document.RootElement.GetRawText()+")");
+        } catch { }
     }
     async Task ToggleBlocker(bool enabled)
     {
@@ -213,5 +268,3 @@ sealed class NovaMenuRenderer : ToolStripProfessionalRenderer
         using var pen=new Pen(Color.FromArgb(53,32,72));e.Graphics.DrawRectangle(pen,0,0,e.ToolStrip.Width-1,e.ToolStrip.Height-1);
     }
 }
-
-

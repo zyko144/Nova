@@ -34,7 +34,7 @@ class NovaDialog(QDialog):
         row=QHBoxLayout();heading=QLabel(title);heading.setObjectName('heading');row.addWidget(heading);row.addStretch()
         close=QPushButton('×');close.setFixedSize(28,28);close.setObjectName('quiet');close.clicked.connect(self.reject);row.addWidget(close);self.body.addLayout(row)
         if subtitle:
-            label=QLabel(subtitle);label.setWordWrap(True);self.body.addWidget(label)
+            label=QLabel(subtitle);label.setTextFormat(Qt.TextFormat.PlainText);label.setWordWrap(True);self.body.addWidget(label)
     def buttons(self,accept='Valider',cancel='Annuler'):
         row=QHBoxLayout();row.addStretch()
         no=QPushButton(cancel);no.clicked.connect(self.reject);row.addWidget(no)
@@ -91,6 +91,13 @@ class NovaTabBar(QTabBar):
     def __init__(self,parent=None):
         super().__init__(parent);self.setDrawBase(False);self.setIconSize(QSize(18,18));self.setMouseTracking(True)
         self.setStyleSheet('QTabBar{background:transparent;border:0}QTabBar::tab{height:42px;min-width:220px;padding:0 12px;margin:0;border:0;background:transparent}QTabBar QToolButton{background:transparent;border:0;border-radius:8px;padding:0}QTabBar QToolButton:hover{background:rgba(130,70,200,30)}')
+    def available_width(self):return max(80,self.parentWidget().width()-294) if self.parentWidget() else 1000
+    def tabSizeHint(self,index):
+        preferred=180 if getattr(self,'compact',False) else 240
+        return QSize(max(44,min(preferred,self.available_width()//max(1,self.count()))),42)
+    def minimumTabSizeHint(self,index):return self.tabSizeHint(index)
+    def sizeHint(self):return QSize(min(self.available_width(),self.count()*self.tabSizeHint(0).width()),42)
+    def minimumSizeHint(self):return QSize(44,42)
     def paintEvent(self,event):
         painter=QPainter(self);painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         painter.setFont(QFont('Segoe UI',10))
@@ -98,8 +105,12 @@ class NovaTabBar(QTabBar):
             rect=self.tabRect(i);selected=i==self.currentIndex()
             if selected:
                 painter.setPen(Qt.PenStyle.NoPen);painter.setBrush(QColor('#191224'));painter.drawRoundedRect(QRectF(rect).adjusted(0,3,0,-2),15,15)
-            if getattr(self,'show_icons',True):
-                image=self.tabIcon(i).pixmap(18,18);painter.drawPixmap(rect.x()+17,rect.center().y()-9,image)
+            narrow=rect.width()<85
+            close=self.tabButton(i,QTabBar.ButtonPosition.RightSide)
+            if close:close.setVisible(not narrow or selected)
+            if getattr(self,'show_icons',True) and (not narrow or not selected):
+                image=self.tabIcon(i).pixmap(16,16);painter.drawPixmap(rect.x()+(rect.width()-16)//2 if narrow else rect.x()+14,rect.center().y()-8,image)
+            if narrow:continue
             painter.setPen(QColor('#eee5fa' if selected else '#9488a7'))
             textRect=rect.adjusted(47 if getattr(self,'show_icons',True) else 17,0,-34,0)
             text=painter.fontMetrics().elidedText(self.tabText(i),Qt.TextElideMode.ElideRight,textRect.width())
