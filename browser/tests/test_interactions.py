@@ -24,6 +24,8 @@ class InteractionTest(unittest.TestCase):
     def test_toolbar_tabs_address_and_compact_settings(self):
         window=Browser();window.setAttribute(Qt.WidgetAttribute.WA_DontShowOnScreen,True);window.show()
         original=window.current();other=window.new_tab();window.tabs.setCurrentWidget(original)
+        self.app.processEvents();self.assertEqual(window.top_tabs.y(),0)
+        QTest.mouseClick(window.top_tabs,Qt.MouseButton.LeftButton,pos=QPoint(window.top_tabs.tabRect(1).center().x(),0));self.assertIs(window.current(),other);window.tabs.setCurrentWidget(original)
         window.top_tabs.moveTab(0,1);self.assertIs(window.current(),original)
         window.address.setFocus();window.address.setText('adresse en cours');other.urlChanged.emit(QUrl('https://example.com'))
         self.assertEqual(window.address.text(),'adresse en cours')

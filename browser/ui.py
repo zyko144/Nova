@@ -94,10 +94,10 @@ class NovaTabBar(QTabBar):
     def available_width(self):return max(80,self.parentWidget().width()-294) if self.parentWidget() else 1000
     def tabSizeHint(self,index):
         preferred=180 if getattr(self,'compact',False) else 240
-        return QSize(max(44,min(preferred,self.available_width()//max(1,self.count()))),42)
+        return QSize(max(44,min(preferred,self.available_width()//max(1,self.count()))),54)
     def minimumTabSizeHint(self,index):return self.tabSizeHint(index)
-    def sizeHint(self):return QSize(min(self.available_width(),self.count()*self.tabSizeHint(0).width()),42)
-    def minimumSizeHint(self):return QSize(44,42)
+    def sizeHint(self):return QSize(min(self.available_width(),self.count()*self.tabSizeHint(0).width()),54)
+    def minimumSizeHint(self):return QSize(44,54)
     def paintEvent(self,event):
         painter=QPainter(self);painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         painter.setFont(QFont('Segoe UI',10))
@@ -112,7 +112,7 @@ class NovaTabBar(QTabBar):
                     try:state='♪' if view.page().recentlyAudible() else ''
                     except RuntimeError:pass
             if selected:
-                painter.setPen(Qt.PenStyle.NoPen);painter.setBrush(QColor('#191224'));painter.drawRoundedRect(QRectF(rect).adjusted(0,3,0,-2),15,15)
+                painter.setPen(Qt.PenStyle.NoPen);painter.setBrush(QColor('#191224'));painter.drawRoundedRect(QRectF(rect).adjusted(0,9,0,-8),15,15)
             narrow=rect.width()<85
             close=self.tabButton(i,QTabBar.ButtonPosition.RightSide)
             if close:close.setVisible(not narrow or selected)

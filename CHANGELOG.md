@@ -1,5 +1,9 @@
 # Historique
 
+## 3.6.3
+
+- Zone cliquable des onglets étendue jusqu'au bord supérieur de la fenêtre, sans changer leur silhouette arrondie.
+
 ## 3.6.2
 
 - Conservation chiffrée du jeton de renouvellement Google et renouvellement au redémarrage / pendant l'utilisation.
