@@ -141,7 +141,7 @@ class Browser(QMainWindow):
         self.profile.setPersistentStoragePath(str(folder / 'storage'))
         self.profile.setCachePath(str(folder / 'cache'))
         self.profile.setHttpCacheMaximumSize(256 * 1024 * 1024)
-        self.profile.setPersistentCookiesPolicy(QWebEngineProfile.PersistentCookiesPolicy.AllowPersistentCookies)
+        self.profile.setPersistentCookiesPolicy(QWebEngineProfile.PersistentCookiesPolicy.ForcePersistentCookies)
         self.profile.downloadRequested.connect(self.download)
         self.tabs = QTabWidget()
         self.tabs.setAutoFillBackground(True)

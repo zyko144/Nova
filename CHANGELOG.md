@@ -1,5 +1,12 @@
 # Historique
 
+## 3.6.2
+
+- Conservation chiffrée du jeton de renouvellement Google et renouvellement au redémarrage / pendant l'utilisation.
+- Une erreur réseau ne supprime plus silencieusement la session enregistrée ; message explicite si une reconnexion est nécessaire.
+- Conservation des cookies de session du moteur classique après fermeture et mise à jour.
+- Une reconnexion Google initiale est nécessaire pour les comptes enregistrés avant ce correctif sans jeton de renouvellement.
+
 ## 3.6.1
 
 - Présentation immersive : illustration plein cadre, grands titres au premier plan et mots-clés violets.

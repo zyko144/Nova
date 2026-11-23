@@ -24,7 +24,7 @@ def verify_identity(token,nonce):
     transport=Request()
     def limited(url,method='GET',body=None,headers=None,**kwargs):return transport(url,method=method,body=body,headers=headers,timeout=15)
     claims=id_token.verify_oauth2_token(token,limited,GOOGLE_DESKTOP_CLIENT_ID)
-    if not claims.get('email_verified') or claims.get('nonce')!=nonce or not claims.get('sub'):raise ValueError('Identité Google invalide')
+    if not claims.get('email_verified') or (nonce is not None and claims.get('nonce')!=nonce) or not claims.get('sub'):raise ValueError('Identité Google invalide')
     return claims
 
 class GoogleFlow(QObject):
@@ -47,7 +47,7 @@ class GoogleFlow(QObject):
         self.in_progress=True
         self.generation+=1
         generation=self.generation
-        self.client.endpoint=endpoint.strip().rstrip('/');self.login_id=''
+        self.client.endpoint=endpoint.strip().rstrip('/');self.login_id='';self.refresh_token=''
         if self.client.endpoint:
             def prepared(data):
                 if generation!=self.generation or not self.in_progress:return
@@ -70,7 +70,7 @@ class GoogleFlow(QObject):
         threading.Thread(target=lambda:server.serve_forever(poll_interval=.1),daemon=True).start()
         self.return_uri=f'http://127.0.0.1:{server.server_port}/'
         challenge=base64.urlsafe_b64encode(hashlib.sha256(self.verifier.encode()).digest()).decode().rstrip('=')
-        url='https://accounts.google.com/o/oauth2/v2/auth?'+urlencode({'client_id':GOOGLE_DESKTOP_CLIENT_ID,'redirect_uri':self.return_uri,'response_type':'code','scope':'openid email profile','state':self.state,'nonce':nonce,'code_challenge':challenge,'code_challenge_method':'S256'})
+        url='https://accounts.google.com/o/oauth2/v2/auth?'+urlencode({'client_id':GOOGLE_DESKTOP_CLIENT_ID,'redirect_uri':self.return_uri,'response_type':'code','scope':'openid email profile','state':self.state,'nonce':nonce,'code_challenge':challenge,'code_challenge_method':'S256','access_type':'offline','prompt':'consent'})
         QDesktopServices.openUrl(QUrl(url));self.client.statusChanged.emit('Terminez la connexion Google dans votre navigateur système.');self.timer.start(300000)
     def finish(self,generation,code,error):
         if generation!=self.generation or not self.in_progress:return
@@ -92,6 +92,7 @@ class GoogleFlow(QObject):
                 if not token:
                     reason=str(value.get('error','échange refusé'))[:80]
                     self.error('Connexion Google non terminée : '+reason+'. Vérifiez la configuration OAuth du client de bureau.');return
+                self.refresh_token=value.get('refresh_token','')
                 def validate():
                     try:self.verified.emit(generation,verify_identity(token,nonce),token)
                     except Exception:self.failed.emit(generation,'Vérification Google impossible. Réessayez sans fermer Nova.')
@@ -102,7 +103,7 @@ class GoogleFlow(QObject):
     def accept(self,generation,claims,token):
         if generation!=self.generation or not self.in_progress:return
         self.in_progress=False
-        self.client.set_google_identity(claims,token,self.nonce)
+        self.client.set_google_identity(claims,token,self.nonce,self.refresh_token)
         if self.client.endpoint:
             self.client.request('/v1/oauth/google/desktop/finish',{'login_id':self.login_id,'id_token':token},self.client.accept_session)
         else:

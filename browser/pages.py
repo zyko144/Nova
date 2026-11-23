@@ -61,35 +61,49 @@ class SyncClient(QWidget):
     changed=Signal()
     avatarChanged=Signal()
     restored=Signal(object,str,str)
+    restoreFailed=Signal(int,str)
     def __init__(self,browser):
         super().__init__(browser);self.browser=browser;self.network=QNetworkAccessManager(self);self.token='';self.email='';self.endpoint='';self.auth_endpoint='';self.revision=0;self.busy=False;self.remote_tabs=[]
         self.timer=QTimer(self);self.timer.setInterval(120000);self.timer.timeout.connect(self.synchronize)
         self.google=GoogleFlow(self)
-        self.google_profile={};self.avatar=QPixmap();self.identity_generation=0
+        self.last_status='';self.statusChanged.connect(lambda message:setattr(self,'last_status',message))
+        self.google_profile={};self.avatar=QPixmap();self.identity_generation=0;self.google_refresh='';self._restore_busy=False
+        self.google_renew=QTimer(self);self.google_renew.setInterval(45*60*1000);self.google_renew.timeout.connect(self.load_google_identity)
         self.restored.connect(self.restore_identity)
+        self.restoreFailed.connect(self.restore_failure)
         QTimer.singleShot(0,self.load_google_identity)
-    def set_google_identity(self,claims,token,nonce):
-        from vault import protect
+    def set_google_identity(self,claims,token,nonce,refresh_token=''):
+        from google_session import save_session
+        if self.google_profile.get('sub')!=claims.get('sub'):self.google_refresh=''
+        self.google_refresh=refresh_token or self.google_refresh
         self.identity_generation+=1;self.google_profile={k:str(claims.get(k,''))[:500] for k in ('name','email','picture','sub')};self.email=claims['email'];self.avatar=QPixmap()
         try:
-            path=self.browser.root/'google-account.dat';temporary=path.with_suffix('.tmp');temporary.write_bytes(protect(json.dumps({'id_token':token,'nonce':nonce}).encode()));temporary.replace(path)
+            save_session(self.browser.root,claims,token,nonce,self.google_refresh)
         except OSError:pass
+        self.google_renew.start(45*60*1000)
         self.signedIn.emit(self.email);self.avatarChanged.emit();self.load_avatar()
     def load_google_identity(self):
         import threading
-        from vault import protect
-        from google_flow import verify_identity
-        try:data=json.loads(protect((self.browser.root/'google-account.dat').read_bytes(),True).decode())
+        from google_session import read_session,restore_session
+        from google_flow import verify_identity,desktop_secret
+        if self._restore_busy:return
+        try:data=read_session(self.browser.root)
         except (OSError,ValueError):return
-        generation=self.identity_generation
+        generation=self.identity_generation;secret=desktop_secret(self.browser);self._restore_busy=True
         def verify():
             try:
-                claims=verify_identity(data['id_token'],data['nonce']);claims['_restore_generation']=generation;self.restored.emit(claims,data['id_token'],data['nonce'])
-            except Exception:pass
+                claims,token,nonce,refresh=restore_session(data,secret,verify_identity);claims['_restore_generation']=generation;claims['_refresh_token']=refresh;self.restored.emit(claims,token,nonce)
+            except Exception as error:self.restoreFailed.emit(generation,str(error))
         threading.Thread(target=verify,daemon=True).start()
     def restore_identity(self,claims,token,nonce):
+        self._restore_busy=False
         if claims.pop('_restore_generation',-1)!=self.identity_generation:return
-        self.set_google_identity(claims,token,nonce);self.statusChanged.emit('Compte Google connecté.')
+        refresh=claims.pop('_refresh_token','');self.set_google_identity(claims,token,nonce,refresh);self.statusChanged.emit('Compte Google connecté.')
+    def restore_failure(self,generation,message):
+        self._restore_busy=False
+        if generation==self.identity_generation:
+            self.statusChanged.emit(message)
+            if 'indisponible' in message:self.google_renew.start(5*60*1000)
     def load_avatar(self):
         generation=self.identity_generation;url=QUrl(self.google_profile.get('picture',''));host=url.host().lower()
         if url.scheme()!='https' or not (host=='googleusercontent.com' or host.endswith('.googleusercontent.com')):return
@@ -174,6 +188,7 @@ class SyncClient(QWidget):
             self.request('/v1/snapshot',{'revision':self.revision,'data':merged},pushed)
         self.request('/v1/snapshot',None,pulled)
     def logout(self):
+        self.google_renew.stop();self.google_refresh=''
         if self.token and self.endpoint==self.auth_endpoint:self.request('/v1/logout',{},lambda data:None)
         self.identity_generation+=1;self.google_profile={};self.avatar=QPixmap()
         try:(self.browser.root/'google-account.dat').unlink(missing_ok=True)
@@ -201,6 +216,7 @@ class AccountPage(InternalPage):
         outer.addWidget(frame);outer.addStretch()
         browser.sync_client.statusChanged.connect(self.status.setText);browser.sync_client.signedIn.connect(self.identity_changed);browser.sync_client.avatarChanged.connect(self.refresh_avatar)
         self.identity_changed(browser.sync_client.email)
+        if browser.sync_client.last_status:self.status.setText(browser.sync_client.last_status)
     def identity_changed(self,email):
         profile=self.browser.sync_client.google_profile;self.identity.setText(profile.get('name') or email or 'Non connecté');self.email.setText(email)
         self.signin.setText('Changer de compte Google' if email else 'Continuer avec Google');self.signout.setVisible(bool(email));self.refresh_avatar()

@@ -71,6 +71,16 @@ Qt/PySide6, Chromium, WebView2 et uBlock Origin Lite conservent leurs propres li
 
 ## Importation et fonctions 3.6
 
+La version 3.6.2 conserve le jeton de renouvellement Google chiffré par Windows
+dans les données utilisateur, séparément du dossier de l'exécutable. Il est
+utilisé au redémarrage et pendant l'utilisation pour renouveler l'identité.
+Une reconnexion initiale est nécessaire pour les comptes des versions précédentes
+qui n'avaient pas enregistré ce jeton. Une révocation par Google ou par l'utilisateur
+peut toujours imposer une nouvelle connexion. Les cookies de session du moteur
+classique sont désormais conservés à la fermeture ; les sites peuvent néanmoins
+expirer ou révoquer leurs propres sessions. Le compte Nova Google et les connexions
+aux sites restent deux mécanismes distincts.
+
 Le premier lancement présente Nova et propose un import explicite. Les favoris
 et l'historique peuvent être lus depuis les profils locaux Chrome, Edge, Brave
 et Opera. Les exports de favoris HTML / JSON et l'historique Chrome Takeout JSON
