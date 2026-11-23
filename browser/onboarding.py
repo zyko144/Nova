@@ -101,7 +101,9 @@ class Welcome(QWidget):
     def skip_step(self):
         if self.step==1 and not self.confirm_skip:self.confirm_skip=True;self.render();return
         self.advance()
-    def finish(self):self.browser.data['welcome_completed']=True;self.browser.save();self.hide();self.deleteLater()
+    def finish(self):
+        from PySide6.QtCore import QTimer
+        self.browser.data['welcome_completed']=True;self.browser.save();self.hide();QTimer.singleShot(500,self.browser.offer_default_browser);self.deleteLater()
     def reject(self):
         if self.step==1 and not self.confirm_skip:self.confirm_skip=True;self.render();return
         if self.step<1:self.step=1;self.confirm_skip=False;self.render();return

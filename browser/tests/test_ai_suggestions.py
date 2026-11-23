@@ -33,3 +33,12 @@ class AITest(unittest.TestCase):
         with patch.object(sys,'frozen',True,create=True),patch.object(default_browser.winreg,'CreateKey') as create,patch.object(default_browser.winreg,'SetValueEx') as write,patch.object(default_browser.QDesktopServices,'openUrl') as open_settings:
             default_browser.register_browser();self.assertTrue(open_settings.called)
             values=[call.args for call in write.call_args_list];self.assertTrue(any(args[1]=='https' and args[-1]=='NovaBrowserURL' for args in values));self.assertTrue(any('--open-url "%1"' in str(args[-1]) for args in values));self.assertFalse(any('UserChoice' in str(call.args) for call in create.call_args_list))
+    def test_default_browser_prompt_is_once_and_never_changes_choice(self):
+        browser=Browser();browser.data.pop('default_browser_prompt_shown',None)
+        try:
+            with patch.object(QApplication,'applicationName',return_value='NovaBrowser'),patch('default_browser.is_default_browser',return_value=False),patch.object(browser.updater,'notify') as notify:
+                browser.offer_default_browser();browser.offer_default_browser();self.assertEqual(notify.call_count,1);self.assertEqual(notify.call_args.kwargs['action_text'],'Choisir Nova')
+            browser.data.pop('default_browser_prompt_shown',None)
+            with patch.object(QApplication,'applicationName',return_value='NovaBrowser'),patch('default_browser.is_default_browser',return_value=True),patch.object(browser.updater,'notify') as notify:
+                browser.offer_default_browser();notify.assert_not_called()
+        finally:browser.close();self.app.processEvents()

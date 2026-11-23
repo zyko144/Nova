@@ -43,7 +43,7 @@ class AISuggestions(QObject):
         self.pending[source]=(query,callback)
         if not self.browser.data['preferences'].get('ai_suggestions',False) or not self.key or not permitted(query):return
         cache=self.cache.get(query.casefold().strip())
-        if cache and time.monotonic()-cache[0]<900:callback(query,cache[1]);return
+        if cache and time.monotonic()-cache[0]<900:self.timer.stop();callback(query,cache[1]);return
         self.timer.start(700)
     def send(self):
         if self.reply or not self.pending or time.monotonic()<self.backoff:return

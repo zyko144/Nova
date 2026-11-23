@@ -1,5 +1,10 @@
 # Historique
 
+## 3.8.1
+
+- Carte d'accueil pour choisir Nova comme navigateur par défaut dans les paramètres Windows.
+- Proposition affichée une seule fois, après la présentation, et masquée si Nova gère déjà HTTP et HTTPS.
+
 ## 3.8.0
 
 - Complétions de recherche par Groq, avec clé locale chiffrée et activation dans les paramètres.

@@ -255,6 +255,18 @@ class Browser(QMainWindow):
             self.updater.notify('Retrouvez vos onglets','Votre dernière session est disponible.',self.restore_session,action_text='Restaurer la session',symbol='reload')
         if not self.data.get('welcome_completed'):
             self.show_welcome()
+        else:QTimer.singleShot(4000,self.offer_default_browser)
+    def offer_default_browser(self):
+        if QApplication.applicationName()!='NovaBrowser' or self.data.get('default_browser_prompt_shown'):return
+        from default_browser import is_default_browser
+        if is_default_browser():return
+        welcome=getattr(self,'welcome',None)
+        if welcome:
+            try:
+                if welcome.isVisible():return
+            except RuntimeError:pass
+        self.data['default_browser_prompt_shown']=True;self.save()
+        self.updater.notify('Votre navigateur, par défaut','Ouvrez vos liens directement dans Nova. Choisissez Nova dans les paramètres Windows.',self.make_default,action_text='Choisir Nova',symbol='home')
     def show_welcome(self):
         from onboarding import Welcome
         existing=getattr(self,'welcome',None)
