@@ -263,16 +263,17 @@ class AccountPage(InternalPage):
         else:self.avatar.setText('');self.avatar.setPixmap(client.avatar.scaled(56,56,Qt.AspectRatioMode.KeepAspectRatio,Qt.TransformationMode.SmoothTransformation))
 
 class SettingsPage(InternalPage):
-    sections=[('Apparence','settings'),('Onglets','plus'),('Confidentialité','vpn'),('VPN','vpn'),('Téléchargements','download'),('Extensions et publicités','extensions'),('Recherche','search'),('Performances','video'),('Compte et démarrage','profile'),('À propos','home'),('Identifiants et saisie','profile')]
+    sections=[('Apparence','settings'),('Onglets','tabs'),('Confidentialité','vpn'),('VPN','vpn'),('Téléchargements','download'),('Extensions et publicités','extensions'),('Recherche','search'),('Performances','performance'),('Compte et démarrage','profile'),('À propos','info'),('Identifiants et saisie','profile')]
     def __init__(self,browser):
         super().__init__('settings','Paramètres',browser)
         self.setStyleSheet(self.styleSheet()+SETTINGS_STYLE)
         root=QHBoxLayout(self);root.setContentsMargins(0,0,0,0);root.setSpacing(0)
         sidebar=QFrame();sidebar.setObjectName('sidebar');sidebar.setFixedWidth(245);side=QVBoxLayout(sidebar);side.setContentsMargins(18,22,18,20)
         brand=QHBoxLayout();logo=QLabel();logo.setPixmap(browser.windowIcon().pixmap(52,52));brand.addWidget(logo);brand.addWidget(text('Nova','brand'));side.addLayout(brand);side.addSpacing(20)
-        self.nav=QListWidget();self.nav.setIconSize(QSize(19,19))
+        self.nav=QListWidget();self.nav.setIconSize(QSize(22,22))
+        from menus import menu_icon
         for name,ico in self.sections:
-            item=QListWidgetItem(generated_icon(ico,26),'Compte Google' if name=='Compte et synchronisation' else name);item.setToolTip(name);item.setSizeHint(QSize(200,36));self.nav.addItem(item)
+            item=QListWidgetItem(menu_icon('shield' if ico=='vpn' else ico),'Compte Google' if name=='Compte et synchronisation' else name);item.setToolTip(name);item.setSizeHint(QSize(200,36));self.nav.addItem(item)
         self.nav.item(3).setHidden(True)
         self.nav.setStyleSheet('QListWidget{padding:0;border:0;background:transparent}QListWidget::item{margin:3px 6px 3px 1px;padding:6px 9px;border:1px solid transparent;border-radius:10px}QListWidget::item:selected{background:#241337;border:1px solid #7340a3;color:#eee5f7}')
         side.addWidget(self.nav);side.addWidget(text('Nova · Version de développement'));root.addWidget(sidebar)
@@ -314,6 +315,7 @@ class SettingsPage(InternalPage):
             for color in ['#9338ff','#5264ff','#11b3ec','#e535a4','#f04469','#f29932','#20bd86']:
                 btn=QPushButton();btn.setFixedSize(30,30);btn.setStyleSheet(f'background:{color};border-radius:15px;border:2px solid #281d38');btn.clicked.connect(lambda checked=False,v=color:b.set_accent(v));colors.addWidget(btn)
             colors.addStretch();controls.addLayout(colors);appearance.addLayout(controls,1);c.addLayout(appearance)
+            self.toggle(c,'Animations discrètes','animations',True)
             frame,c=card('Onglets','Gérez votre espace de travail.');layout.addWidget(frame)
             self.toggle(c,'Afficher les icônes des onglets','tab_icons',True,b.update_tab_style)
             self.toggle(c,'Utiliser des onglets compacts','compact_tabs',False,b.update_tab_style)

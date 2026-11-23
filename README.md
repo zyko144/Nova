@@ -10,6 +10,8 @@ documenté dans [search-server](search-server/README.md).
 
 - Interface native Python/PySide6 et Qt WebEngine.
 - Moteur vidéo Edge WebView2 intégré, avec uBlock Origin Lite.
+- Menus contextuels Nova au-dessus des pages intégrées et enregistrement des images via le dialogue Nova.
+- Panneaux compacts sous les icônes : téléchargements avec progression/débit et gestion des extensions du moteur compatible.
 - Paramètres natifs, raccourcis personnalisables et thèmes violet / noir profond.
 - Onglets adaptatifs, suggestions locales et coffre de saisie chiffré par Windows DPAPI.
 - Connexion Google Desktop via navigateur système et PKCE ; configuration dans `sync-server/GOOGLE-SETUP.txt`.

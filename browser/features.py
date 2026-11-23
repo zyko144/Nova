@@ -91,6 +91,7 @@ class Features:
         if getattr(self,'floating',None):self.floating.close()
         if self.updater.toast:self.updater.toast.close()
         self.download_panel.hide()
+        if hasattr(self,'extension_panel'):self.extension_panel.hide()
         if getattr(self,'site_popup',None):self.site_popup.close()
         if self.preview_popup:self.preview_popup.close();self.preview_popup=None
         views=self.findChildren(QWebEngineView)+self.findChildren(MediaView)
@@ -160,11 +161,12 @@ class Features:
     def tab_menu(self,point):
         index=self.top_tabs.tabAt(point)
         if index<0:return
-        view=self.top_tabs.tabData(index);menu=QMenu(self)
-        menu.addAction('Désépingler' if getattr(view,'_pinned',False) else 'Épingler cet onglet',lambda:self.toggle_pin(view))
-        menu.addAction('Réactiver le son' if getattr(view,'_muted',False) else 'Couper le son',lambda:self.toggle_mute(view))
-        menu.addAction('Mettre en veille',lambda:self.pause_view(view))
-        menu.addSeparator();menu.addAction('Fermer',lambda:self.close_tab(self.tabs.indexOf(view)));menu.exec(self.top_tabs.mapToGlobal(point))
+        from menus import NovaMenu
+        view=self.top_tabs.tabData(index);menu=NovaMenu(self);menu.section('Cet onglet')
+        menu.entry('Désépingler' if getattr(view,'_pinned',False) else 'Épingler cet onglet','pin',lambda:self.toggle_pin(view))
+        menu.entry('Réactiver le son' if getattr(view,'_muted',False) else 'Couper le son','sound',lambda:self.toggle_mute(view))
+        menu.entry('Mettre en veille','sleep',lambda:self.pause_view(view))
+        menu.addSeparator();menu.entry('Fermer l’onglet','close',lambda:self.close_tab(self.tabs.indexOf(view)),'Ctrl+W');menu.exec(self.top_tabs.mapToGlobal(point));menu.deleteLater()
     def toggle_focus(self):
         self.focus_mode=not self.focus_mode;self.bar.setVisible(not self.focus_mode)
         if self.focus_mode:self.updater.notify('Mode concentration','Ctrl + Maj + F pour retrouver la barre de navigation.')
@@ -213,7 +215,12 @@ class Features:
             if kind=='permission':view.send('permission-result',json.dumps({'id':str(data.get('id','')),'allow':False}));return
             if kind=='download-request':view.send('download-answer',json.dumps({'id':str(data.get('id','')),'path':''}));return
             if kind in ('translate','copy-link','screenshot'):return
-        if kind=='dirty':view._dirty=bool(data.get('value'))
+        if kind=='context-menu':
+            from menus import native_context_menu
+            native_context_menu(self,view,data)
+        elif kind in ('extensions-state','extensions-error'):
+            if hasattr(self,'extension_panel'):self.extension_panel.update_data(view,data)
+        elif kind=='dirty':view._dirty=bool(data.get('value'))
         elif kind=='capture-state':self.protection_message(view,dict(data,type='nova-capture-state'))
         elif kind=='translate':self.translate_french(str(data.get('value','')))
         elif kind=='copy-link':self.copy_link(str(data.get('value','')))
@@ -321,8 +328,8 @@ class Features:
         if reason:
             warning=QLabel(reason);warning.setWordWrap(True);layout.addWidget(warning)
         def action(title,symbol,cb,arrow=False):
-            button=QPushButton();button.setAccessibleName(title);button.setCursor(Qt.CursorShape.ArrowCursor);button.setFixedHeight(42);row=QHBoxLayout(button);row.setContentsMargins(6,6,5,6);row.setSpacing(12)
-            image=QLabel();image.setPixmap(monochrome(icon(symbol,18),18).pixmap(18,18));image.setFixedWidth(20);row.addWidget(image);label=QLabel(title);label.setStyleSheet('font-size:12px;color:#dddddf');row.addWidget(label,1)
+            button=QPushButton();button.setAccessibleName(title);button.setCursor(Qt.CursorShape.ArrowCursor);button.setFixedHeight(44);row=QHBoxLayout(button);row.setContentsMargins(6,6,5,6);row.setSpacing(12)
+            image=QLabel();image.setPixmap(monochrome(icon(symbol,22),22).pixmap(22,22));image.setFixedWidth(25);row.addWidget(image);label=QLabel(title);label.setStyleSheet('font-size:12px;color:#dddddf');row.addWidget(label,1)
             if arrow:chevron=QLabel('›');chevron.setStyleSheet('color:#9999a4;font-size:19px');row.addWidget(chevron)
             for child in button.findChildren(QLabel):child.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
             button.clicked.connect(lambda:(d.close(),cb()));layout.addWidget(button)
@@ -332,13 +339,14 @@ class Features:
         action('Données du site','settings',lambda:self.clear_site(view),True);layout.addSpacing(5);separator()
         more=QPushButton('Plus d’options');more.setObjectName('more');layout.addWidget(more)
         def options():
-            menu=QMenu(d);menu.setStyleSheet('QMenu{background:#1b1b20;color:#dcdce2;border:1px solid #3c3c44;border-radius:8px;padding:5px}QMenu::item{padding:9px 12px;border-radius:5px}QMenu::item:selected{background:#303037}')
-            def item(title,callback):menu.addAction(title).triggered.connect(lambda:(d.close(),callback()))
-            item('Confidentialité et envois de texte',lambda:self.open_settings(2))
-            item('Ouvrir dans une session isolée',lambda:self.private_window(QUrl(url),True))
-            item('Journal de protection',self.protection_log)
-            if self.private:item('À propos des vérifications robot',lambda:NovaMessage.information(self,'Vérifications des sites','Les cookies restent dans cette fenêtre jusqu’à sa fermeture. Une nouvelle session privée n’a pas les cookies de confiance précédents : les sites peuvent demander un CAPTCHA. Nova ne contourne pas ces vérifications.'))
-            menu.addSeparator();item('Arrêter l’activité du site',lambda:self.revoke_site(view,True));menu.exec(more.mapToGlobal(more.rect().bottomLeft()))
+            from menus import NovaMenu
+            menu=NovaMenu(d);menu.section('Protection et confidentialité')
+            def item(title,symbol,callback):menu.entry(title,symbol,lambda:(d.close(),callback()))
+            item('Confidentialité et envois de texte','settings',lambda:self.open_settings(2))
+            item('Ouvrir dans une session isolée','private',lambda:self.private_window(QUrl(url),True))
+            item('Journal de protection','history',self.protection_log)
+            if self.private:item('Vérifications robot','info',lambda:NovaMessage.information(self,'Vérifications des sites','Les cookies restent dans cette fenêtre jusqu’à sa fermeture. Une nouvelle session privée n’a pas les cookies de confiance précédents : les sites peuvent demander un CAPTCHA. Nova ne contourne pas ces vérifications.'))
+            menu.addSeparator();item('Arrêter l’activité du site','close',lambda:self.revoke_site(view,True));menu.exec(more.mapToGlobal(more.rect().bottomLeft()));menu.deleteLater()
         more.clicked.connect(options);d.adjustSize();return d
     def site_panel(self):
         if self._private_locked:return

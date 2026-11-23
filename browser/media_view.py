@@ -74,7 +74,7 @@ class MediaView(QWidget):
                 except (ValueError,TypeError):pass
                 continue
             if kind=='resources':self._renderer_memory=int(event.get('memory',0));continue
-            if kind in ('security','permission','download-request','download-state','capture-state','dirty','translate','copy-link','screenshot'):
+            if kind in ('context-menu','extensions-state','extensions-error','security','permission','download-request','download-state','capture-state','dirty','translate','copy-link','screenshot'):
                 self.securityEvent.emit(event);continue
             if kind=='url':
                 if self.pending_url and not self.ready:continue

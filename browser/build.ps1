@@ -4,6 +4,10 @@ dotnet publish MediaHost/NovaMediaHost.csproj -c Release -r win-x64 --self-conta
 if ($LASTEXITCODE -ne 0) { throw 'Compilation du moteur vidéo échouée' }
 Copy-Item autofill.js MediaHost/bin-runtime/autofill.js -Force
 Copy-Item protection.js MediaHost/bin-runtime/protection.js -Force
+python render_menu_icons.py
+if ($LASTEXITCODE -ne 0) { throw 'Rendu des icônes de menu échoué' }
+New-Item -ItemType Directory -Force MediaHost/bin-runtime/MenuIcons | Out-Null
+Copy-Item build/menu-icons/* -Destination MediaHost/bin-runtime/MenuIcons -Recurse -Force
 New-Item -ItemType Directory -Force MediaHost/bin-runtime/Extensions | Out-Null
 Copy-Item blocker/ubol -Destination MediaHost/bin-runtime/Extensions/ -Recurse -Force
 python version_resource.py
@@ -15,6 +19,7 @@ $icuFile = Join-Path $PSScriptRoot 'dist/Nova/_internal/icuuc.dll'
 if (Test-Path -LiteralPath $icuFile) {
     Move-Item -LiteralPath $icuFile -Destination (Join-Path $PSScriptRoot 'build/icuuc-excluded.dll') -Force
 }
-Copy-Item MediaHost/bin-runtime -Destination dist/Nova/MediaHost -Recurse -Force
+New-Item -ItemType Directory -Force dist/Nova/MediaHost | Out-Null
+Copy-Item MediaHost/bin-runtime/* -Destination dist/Nova/MediaHost -Recurse -Force
 Copy-Item Configurer-Google-Nova.ps1,Configurer-Google.cmd dist/Nova/ -Force
 Write-Output 'Prêt : dist/Nova/Nova.exe'

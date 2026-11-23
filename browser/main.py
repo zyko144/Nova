@@ -85,26 +85,33 @@ class Page(QWebEnginePage):
 class NovaWebView(QWebEngineView):
     def __init__(self,window):super().__init__();self.window=window
     def contextMenuEvent(self,event):
-        request=self.lastContextMenuRequest();menu=QMenu(self.window)
-        menu.setStyleSheet('QMenu{background:#100b19;color:#e3d7ef;border:1px solid #332242;border-radius:13px;padding:7px}QMenu::item{padding:9px 24px;border-radius:7px;margin:2px}QMenu::item:selected{background:#28173d}QMenu::separator{height:1px;background:#2b1e39;margin:5px}')
+        from menus import NovaMenu,menu_icon
+        request=self.lastContextMenuRequest();menu=NovaMenu(self.window)
         link=request.linkUrl()
         if link.isValid() and link.scheme() in ('http','https'):
-            menu.addAction(icon('plus'),'Ouvrir dans un nouvel onglet').triggered.connect(lambda:self.window.new_tab(link))
-            menu.addAction('Copier l’adresse du lien').triggered.connect(lambda:self.window.copy_link(link.toString()))
+            menu.addAction(menu_icon('plus'),'Ouvrir dans un nouvel onglet').triggered.connect(lambda:self.window.new_tab(link))
+            menu.addAction(menu_icon('copy'),'Copier l’adresse du lien').triggered.connect(lambda:self.window.copy_link(link.toString()))
             if self.url().scheme()=='about' and link.host()!='nova.local':
                 title=next((x['title'] for x in self.window.data['shortcuts'] if x['url']==link.toString()),None)
                 if title is None:title=next((n for n,u,s in SHORTCUTS if QUrl(u)==link),link.host())
-                menu.addSeparator();menu.addAction('Modifier le raccourci…').triggered.connect(lambda:self.window.edit_shortcut(link.toString(),title));menu.addAction('Supprimer le raccourci').triggered.connect(lambda:self.window.remove_shortcut(link.toString()))
+                menu.addSeparator();menu.addAction(menu_icon('settings'),'Modifier le raccourci…').triggered.connect(lambda:self.window.edit_shortcut(link.toString(),title));menu.addAction(menu_icon('trash'),'Supprimer le raccourci').triggered.connect(lambda:self.window.remove_shortcut(link.toString()))
             menu.addSeparator()
-        if request.selectedText():menu.addAction('Copier la sélection').triggered.connect(lambda:self.page().triggerAction(QWebEnginePage.WebAction.Copy))
-        if request.isContentEditable():menu.addAction('Coller').triggered.connect(lambda:self.page().triggerAction(QWebEnginePage.WebAction.Paste))
-        menu.addAction(icon('back'),'Retour').triggered.connect(self.back)
-        menu.addAction(icon('forward'),'Suivant').triggered.connect(self.forward)
-        menu.addAction(icon('reload'),'Actualiser').triggered.connect(self.reload)
-        menu.addSeparator();menu.addAction('Traduire en français').triggered.connect(lambda:self.window.translate_french(request.selectedText()))
-        menu.addAction('Capture de la page').triggered.connect(self.window.capture_page)
-        menu.addAction(icon('settings'),'Paramètres Nova').triggered.connect(self.window.open_settings)
-        menu.exec(event.globalPos())
+        image=request.mediaUrl()
+        if request.mediaType().name=='MediaTypeImage':
+            menu.section('Image')
+            for title,symbol,action in [('Enregistrer l’image sous…','download',QWebEnginePage.WebAction.DownloadImageToDisk),('Copier l’image','copy',QWebEnginePage.WebAction.CopyImageToClipboard),('Copier l’adresse de l’image','copy',QWebEnginePage.WebAction.CopyImageUrlToClipboard)]:
+                menu.addAction(menu_icon(symbol),title).triggered.connect(lambda checked=False,a=action:self.page().triggerAction(a))
+            if image.scheme() in ('http','https'):menu.entry('Ouvrir l’image dans un nouvel onglet','plus',lambda:self.window.new_tab(image))
+            menu.addSeparator()
+        if request.selectedText():menu.addAction(menu_icon('copy'),'Copier la sélection').triggered.connect(lambda:self.page().triggerAction(QWebEnginePage.WebAction.Copy))
+        if request.isContentEditable():menu.addAction(menu_icon('paste'),'Coller').triggered.connect(lambda:self.page().triggerAction(QWebEnginePage.WebAction.Paste))
+        menu.addAction(menu_icon('back'),'Retour').triggered.connect(self.back)
+        menu.addAction(menu_icon('forward'),'Suivant').triggered.connect(self.forward)
+        menu.addAction(menu_icon('reload'),'Actualiser').triggered.connect(self.reload)
+        menu.addSeparator();menu.addAction(menu_icon('translate'),'Traduire en français').triggered.connect(lambda:self.window.translate_french(request.selectedText()))
+        menu.addAction(menu_icon('capture'),'Capture de la page').triggered.connect(self.window.capture_page)
+        menu.addAction(menu_icon('settings'),'Paramètres Nova').triggered.connect(self.window.open_settings)
+        menu.exec(event.globalPos());menu.deleteLater()
 
 from features import Features
 from security import upgrade_http,suspicious
@@ -205,7 +212,7 @@ class Browser(Features,QMainWindow):
             action=bar.addAction(icon(name),tip);action.triggered.connect(callback)
             if name=='profile':self.profile_action=action
         self.sync_client.signedIn.connect(self.update_google_profile);self.sync_client.avatarChanged.connect(self.update_google_profile)
-        for key, callback in [('Ctrl+L', lambda:self.address.setFocus()), ('Ctrl+W', lambda:self.close_tab(self.tabs.currentIndex())), ('Ctrl+Tab', lambda:self.tabs.setCurrentIndex((self.tabs.currentIndex()+1)%self.tabs.count())), ('F11', lambda:self.showNormal() if self.isFullScreen() else self.showFullScreen())]:
+        for key, callback in [('Ctrl+L', lambda:self.address.setFocus()), ('Ctrl+W', lambda:self.close_tab(self.tabs.currentIndex())), ('Ctrl+Tab', lambda:self.tabs.setCurrentIndex((self.tabs.currentIndex()+1)%self.tabs.count())), ('F11', self.toggle_browser_fullscreen)]:
             action=QAction(self); action.setShortcut(QKeySequence(key)); action.triggered.connect(callback); self.addAction(action)
         self.setStyleSheet('''QMainWindow,QTabWidget::pane{background:#07060e;border:0}QToolBar{background:#100d1c;border:0;padding:10px;spacing:8px}QToolButton{color:#d4c4ff;background:transparent;border:0;border-radius:10px;padding:8px;font-size:22px}QToolButton:hover{background:#302047}QLineEdit{background:#080710;border:1px solid #292034;border-radius:21px;padding:12px 18px;color:#eee;font-size:15px;min-width:300px}QTabBar::tab{background:#0a0811;color:#a99dbf;padding:13px 26px;min-width:130px;max-width:220px}QTabBar::tab:selected{background:#20162f;color:#f5eeff;border-top:2px solid #9b46ff}QMenu{background:#171120;color:#eee;border:1px solid #4b3069}QMenu::item{padding:9px 25px}QMenu::item:selected{background:#4b2568}QStatusBar{background:#100d1c;color:#c5b4df}''')
         self.setStyleSheet(self.styleSheet()+'''QWidget#chrome,QWidget#titleBar{background:#080611}QToolBar{background:#100d1c;padding:4px 16px;spacing:16px;border-bottom:1px solid #21172e}QToolButton{padding:6px}QToolButton#closeWindow:hover{background:#b62b51}QTabBar::tab{background:transparent;min-width:170px;max-width:230px;padding:14px 20px;border:0;color:#b8abc9}QTabBar::tab:selected{background:#1a1429;border-top:0;border-top-left-radius:20px;border-top-right-radius:20px;color:#f8f1ff}QLineEdit{padding:10px 16px;border-radius:24px;min-width:200px;border:0;background:#080610}QTabWidget::pane{border:0}''')
@@ -262,6 +269,7 @@ class Browser(Features,QMainWindow):
     def tab_changed(self,*args):
         current=self.current();previous=self._active_view
         if previous is not current:
+            if getattr(self,'_video_fullscreen_active',False):self.exit_video_fullscreen(previous)
             if previous is not None and not getattr(previous,'_closing',False):
                 if isinstance(previous,MediaView):previous.send('thumbnail')
                 try:previous._preview=previous.grab().scaled(280,160,Qt.AspectRatioMode.KeepAspectRatio,Qt.TransformationMode.SmoothTransformation)
@@ -386,8 +394,8 @@ class Browser(Features,QMainWindow):
         elif command=='close-tab':self.close_tab(self.tabs.indexOf(view))
         elif command=='next-tab':self.tabs.setCurrentIndex((self.tabs.currentIndex()+1)%self.tabs.count())
         elif command=='previous-tab':self.tabs.setCurrentIndex((self.tabs.currentIndex()-1)%self.tabs.count())
-        elif command=='fullscreen':self.fullscreen(not self.isFullScreen())
-        elif command=='exit-fullscreen' and self.isFullScreen():self.fullscreen(False)
+        elif command=='fullscreen':self.toggle_browser_fullscreen()
+        elif command=='exit-fullscreen':self.exit_video_fullscreen()
     def resolve(self,value):
         if value.strip().lower() in ('youtube','yt'):return QUrl('https://www.youtube.com/')
         if value.strip().lower().startswith(('yt ','youtube ')):return QUrl('https://www.youtube.com/results?search_query='+quote_plus(value.strip().split(' ',1)[1]))
@@ -543,9 +551,33 @@ class Browser(Features,QMainWindow):
         if getattr(self,'welcome',None):
             try:self.welcome.setGeometry(0,self.titlebar.height(),self.width(),self.height()-self.titlebar.height())
             except RuntimeError:self.welcome=None
-    def fullscreen(self,on):
-        self.chrome.setVisible(not on)
-        self.showFullScreen() if on else self.showNormal()
+    def fullscreen(self,on,view=None):
+        if on:
+            if view is not None and view is not self.current():return
+            if getattr(self,'_video_fullscreen_active',False):return
+            self._video_fullscreen_active=True;self._video_fullscreen_owner=view or self.current();self._before_video_state=self.windowState();self._before_video_chrome=not self.chrome.isHidden()
+            self.chrome.hide();self.showFullScreen()
+        else:
+            if not getattr(self,'_video_fullscreen_active',False):return
+            if view is not None and view is not self._video_fullscreen_owner:return
+            self._video_fullscreen_active=False;self._video_fullscreen_owner=None
+            self.chrome.setVisible(self._before_video_chrome and not self._private_locked)
+            state=self._before_video_state
+            if state & Qt.WindowState.WindowFullScreen:self.showFullScreen()
+            elif state & Qt.WindowState.WindowMaximized:self.showMaximized()
+            else:self.showNormal()
+    def exit_video_fullscreen(self,view=None):
+        if not getattr(self,'_video_fullscreen_active',False):return
+        owner=getattr(self,'_video_fullscreen_owner',None)
+        if view is not None and view is not owner:return
+        try:
+            if isinstance(owner,MediaView):owner.send('exit-fullscreen')
+            elif isinstance(owner,QWebEngineView):owner.page().runJavaScript('if(document.fullscreenElement)document.exitFullscreen().catch(()=>{});')
+        except RuntimeError:pass
+        self.fullscreen(False,owner)
+    def toggle_browser_fullscreen(self):
+        if getattr(self,'_video_fullscreen_active',False):self.exit_video_fullscreen();return
+        self.showNormal() if self.isFullScreen() else self.showFullScreen()
     def navigate(self,url):
         self.address.clearFocus()
         if not self.permit_navigation(url,self.current()):return
@@ -593,6 +625,7 @@ class Browser(Features,QMainWindow):
         profile=self.root/'profiles'/self.profile.storageName()/'media'
         view=MediaView(url,profile,self)
         if self.private:view.arguments.append('--private')
+        if self.data['preferences'].get('builtin_blocker_removed',False):view.arguments.append('--skip-builtin')
         view.securityEvent.connect(lambda payload:self.native_security(view,payload))
         view.previous_view=old;view._pinned=getattr(old,'_pinned',False);view._muted=getattr(old,'_muted',False)
         if view._muted:view.send('mute','on')
@@ -601,7 +634,7 @@ class Browser(Features,QMainWindow):
         view.iconChanged.connect(lambda image:self.tab_favicon(view,image))
         view.urlChanged.connect(lambda u:self.page_url_changed(view))
         view.loadFinished.connect(lambda ok:self.loaded(view,ok))
-        view.fullscreenChanged.connect(self.fullscreen)
+        view.fullscreenChanged.connect(lambda enabled:self.fullscreen(enabled,view))
         view.newTabRequested.connect(lambda value:self.new_tab(QUrl(value)))
         view.settingsRequested.connect(self.open_settings)
         view.credentialCaptured.connect(lambda payload:self.capture_credentials(view,payload))
@@ -646,14 +679,14 @@ class Browser(Features,QMainWindow):
             newurl=canonical_url(dialog.address.text());self.data['hidden_shortcuts']=[u for u in self.data['hidden_shortcuts'] if canonical_url(u)!=newurl]
             self.data['shortcuts'].append({'title':dialog.name.text().strip(),'url':newurl});self.save();self.refresh_home_tabs()
     def extensions_info(self):
-        view=self.current()
-        if isinstance(view,MediaView):
-            if view.adblock_enabled: view.send('adblock-settings')
-            else: QMessageBox.information(self,'Bloqueur de publicités','uBlock Origin Lite : '+view.adblock_name)
-        else: QMessageBox.information(self,'Bloqueur de publicités','uBlock Origin Lite est intégré aux onglets du moteur vidéo compatible. Utilisez le bouton vidéo pour ouvrir ce site avec le bloqueur, puis l’icône Extensions pour ses réglages.')
-    def downloads_menu(self):
         if self._private_locked:return
-        self.download_panel.show();self.download_panel.raise_();self.download_panel.activateWindow()
+        if not hasattr(self,'extension_panel'):
+            from extensions_panel import Extensions
+            self.extension_panel=Extensions(self)
+        self.extension_panel.open_panel()
+    def downloads_menu(self,checked=None):
+        if self._private_locked:return
+        self.download_panel.show_panel(toggle=isinstance(checked,bool))
     def new_tab(self, url=None):
         view=NovaWebView(self); page=Page(self.profile,self);page.setBackgroundColor(QColor('#080808' if self.private else '#07060e')); view.setPage(page)
         install_bridge(self,view)
@@ -665,7 +698,7 @@ class Browser(Features,QMainWindow):
         settings.setAttribute(QWebEngineSettings.WebAttribute.JavascriptCanPaste, False)
         settings.setAttribute(QWebEngineSettings.WebAttribute.WebRTCPublicInterfacesOnly,self.data['preferences'].get('webrtc_public',True))
         settings.setAttribute(QWebEngineSettings.WebAttribute.FullScreenSupportEnabled, True)
-        page.fullScreenRequested.connect(lambda request:(request.accept(),self.fullscreen(request.toggleOn())))
+        page.fullScreenRequested.connect(lambda request:(request.accept(),self.fullscreen(request.toggleOn(),view)) if view is self.current() else request.reject())
         page.permissionRequested.connect(lambda permission:self.ask_permission(view,permission.origin().toString(),permission.permissionType().name,lambda yes:permission.grant() if yes else permission.deny()))
         page.newWindowRequested.connect(lambda request:self.popup_request(view,request))
         page.certificateError.connect(lambda error:error.rejectCertificate())
@@ -696,6 +729,9 @@ class Browser(Features,QMainWindow):
         if getattr(self,"floating",None) and self.tabs.widget(index) is self.floating.placeholder:self.floating.close()
         view=self.tabs.widget(index)
         if not self.confirm_close(view):return
+        from motion import close_tab as animate_close_tab
+        animate_close_tab(self.top_tabs,index,self)
+        self.exit_video_fullscreen(view)
         self.revoke_site(view)
         view._closing=True
         hidden=getattr(view,'forward_media',None)
@@ -846,36 +882,11 @@ class Browser(Features,QMainWindow):
         self.download_records.append(Path(path).name)
         item.stateChanged.connect(lambda state:self.statusBar().showMessage(f'Téléchargement : {item.downloadFileName()} · {state.name}'))
     def menu(self):
-        menu=QMenu(self)
-        menu.addAction('Nouvelle fenêtre privée · Ctrl+Maj+N').triggered.connect(self.private_window)
-        if self.private:menu.addAction('Verrouiller la fenêtre privée').triggered.connect(self.lock_private_window)
-        tools=menu.addMenu('Outils de page')
-        for title,cb in [('Traduire en français',self.translate_french),('Capture de la page',self.capture_page),('Bloc-notes',self.notes),('Couper / réactiver le son',self.toggle_mute),('Mode concentration',self.toggle_focus),('Mode présentation privé',self.toggle_presentation),('Activité des onglets',self.resource_panel),('Protection de ce site',self.site_panel)]:tools.addAction(title).triggered.connect(cb)
-        menu.addAction(icon('settings'),'Paramètres Nova').triggered.connect(self.open_settings)
-        menu.addAction(icon('profile'),'Compte Google').triggered.connect(self.open_account)
-        menu.addAction(icon('plus'),'Ajouter une application…').triggered.connect(self.add_shortcut)
-        menu.addAction('Restaurer la dernière session').triggered.connect(self.restore_session)
-        menu.addAction('Importer mes données…').triggered.connect(self.open_import)
-        menu.addAction('Revoir la présentation').triggered.connect(self.show_welcome)
-        menu.addAction('Définir Nova comme navigateur par défaut').triggered.connect(self.make_default)
-        menu.addAction('Lecteur flottant').triggered.connect(self.floating_player)
-        menu.addSeparator()
-        for title,key in ([] if self.presentation else [('Favoris','bookmarks'),('Historique','history')]):
-            sub=menu.addMenu(title)
-            for entry in self.data[key][:40]:
-                sub.addAction(entry['title'][:60] or entry['url']).triggered.connect(lambda checked=False,u=entry['url']:self.new_tab(QUrl(u)))
-            if not self.data[key]: sub.addAction('Aucun élément').setEnabled(False)
-        profiles=menu.addMenu('Profils locaux')
-        for ident,name in self.data['profiles'].items():
-            profiles.addAction(('✓ ' if ident==self.data['active'] else '')+name).triggered.connect(lambda checked=False,i=ident:self.switch_profile(i))
-        profiles.addAction('Créer un profil…').triggered.connect(self.create_profile)
-        menu.addAction('Compte Google').triggered.connect(self.open_account)
-        menu.addAction('Moteur vidéo compatible (YouTube / directs)').triggered.connect(self.compatible_video)
-        menu.addAction('Bloqueur de publicités : réglages uBlock Origin Lite').triggered.connect(self.extensions_info)
-        menu.addAction('Ouvrir ce site avec le moteur classique (connexions)').triggered.connect(self.classic_mode)
-        menu.addAction('Effacer historique et cache').triggered.connect(self.clear)
-        menu.addAction('À propos et sécurité').triggered.connect(lambda:QMessageBox.information(self,'Nova','Nova · Qt WebEngine et WebView2\n\nNova Search utilise notre index indépendant, encore limité. Vos profils et votre coffre chiffré par Windows restent sur cet ordinateur.\n\nConnexion au compte via Google. uBlock Origin Lite dans le moteur vidéo. Mises à jour distribuées sur GitHub. Version de développement non auditée.'))
-        menu.exec(self.mapToGlobal(self.rect().topRight())-QPoint(320,-100))
+        if self._private_locked:return
+        from menus import build_main_menu
+        menu=build_main_menu(self)
+        anchor=self.bar.widgetForAction(next(a for a in self.bar.actions() if a.text()=='Menu Nova'))
+        menu.exec(anchor.mapToGlobal(QPoint(anchor.width()-menu.sizeHint().width(),anchor.height()+6)));menu.deleteLater()
     def create_profile(self):
         name,ok=QInputDialog.getText(self,'Créer un profil local','Nom (sans compte cloud ni mot de passe) :')
         if ok and name.strip():
@@ -891,6 +902,7 @@ class Browser(Features,QMainWindow):
             if any(not self.confirm_close(self.tabs.widget(i)) for i in range(self.tabs.count())):event.ignore();return
             self._closing_window=True
         if getattr(self,"floating",None):self.floating.close()
+        if hasattr(self,'extension_panel'):self.extension_panel.hide();self.extension_panel.stop_service()
         self._session_timer.stop();self.save_session()
         self.save()
         if self.search:self.search.close()

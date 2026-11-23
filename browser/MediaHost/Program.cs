@@ -49,9 +49,13 @@ sealed class MediaWindow : Form
     readonly bool noAdblock;
     readonly bool selfTest;
     readonly bool privateMode;
+    readonly bool skipBuiltin;
+    readonly string testImageUrl;
     readonly Dictionary<string,(CoreWebView2PermissionRequestedEventArgs Args,CoreWebView2Deferral Deferral)> permissions=new();
     readonly Dictionary<string,(CoreWebView2DownloadStartingEventArgs Args,CoreWebView2Deferral Deferral)> downloadRequests=new();
     readonly Dictionary<string,CoreWebView2DownloadOperation> downloads=new();
+    readonly HashSet<string> imageJobs=new(),cancelledImages=new();
+    readonly Dictionary<string,(CoreWebView2ContextMenuRequestedEventArgs Args,CoreWebView2Deferral Deferral)> contexts=new();
     readonly HashSet<string> trustedHosts=new(),httpHosts=new();
     readonly List<(CoreWebView2PermissionKind Kind,string Origin)> grantedPermissions=new();
     DateTime lastPopup=DateTime.MinValue;
@@ -63,6 +67,7 @@ sealed class MediaWindow : Form
     bool suspendRequested;
     bool contentLocked;
     readonly List<Form> loginPopups=new();
+    readonly Dictionary<string,Image> menuIcons=new();
     readonly List<CoreWebView2Frame> frames = new();
     const string PauseScript="(()=>{const playing=[...document.querySelectorAll('video,audio')].filter(e=>!e.paused&&!e.ended);window.__novaPausedMedia=[...new Set([...(window.__novaPausedMedia||[]).filter(e=>e.isConnected),...playing])];playing.forEach(e=>e.pause());return playing.length;})()";
     const string ResumeScript="(()=>{const media=window.__novaPausedMedia||[];window.__novaPausedMedia=[];media.filter(e=>e.isConnected).forEach(e=>{try{e.play()?.catch(()=>{});}catch{}});})()";
@@ -75,7 +80,8 @@ sealed class MediaWindow : Form
     {
         parent = new IntPtr(long.Parse(args[0])); profile = args[1]; initialUrl = args[2];
         probe = args.Contains("--probe");selfTest=args.Contains("--self-test");
-        noAdblock = args.Contains("--no-adblock");privateMode=args.Contains("--private");
+        noAdblock = args.Contains("--no-adblock");privateMode=args.Contains("--private");skipBuiltin=args.Contains("--skip-builtin");
+        testImageUrl=args.FirstOrDefault(arg=>arg.StartsWith("--test-image="))?[13..]??"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=";
         if(Uri.TryCreate(initialUrl,UriKind.Absolute,out var initial))trustedHosts.Add(initial.Host);
         FormBorderStyle = FormBorderStyle.None; ShowInTaskbar = parent == IntPtr.Zero;
         BackColor = Color.FromArgb(5, 4, 12); Controls.Add(web);
@@ -101,6 +107,7 @@ sealed class MediaWindow : Form
     protected override void OnFormClosed(FormClosedEventArgs e)
     {
         sizeTimer.Stop();
+        foreach(var image in menuIcons.Values)image.Dispose();menuIcons.Clear();
         if(inputAttached)AttachThreadInput(ownThread,parentThread,false);
         base.OnFormClosed(e);
     }
@@ -114,6 +121,13 @@ sealed class MediaWindow : Form
             return;
         }
         base.WndProc(ref message);
+    }
+    Image? MenuIcon(string name)
+    {
+        if(menuIcons.TryGetValue(name,out var cached))return cached;
+        string file=Path.Combine(AppContext.BaseDirectory,"MenuIcons",name+".png");
+        if(!File.Exists(file))return null;
+        using var stream=new MemoryStream(File.ReadAllBytes(file));using var source=Image.FromStream(stream);var image=new Bitmap(source);menuIcons[name]=image;return image;
     }
     void LockContent()
     {
@@ -160,7 +174,7 @@ sealed class MediaWindow : Form
             try
             {
                 string extensionPath = Path.Combine(AppContext.BaseDirectory,"Extensions","ubol");
-                if (File.Exists(Path.Combine(extensionPath,"manifest.json")))
+                if (!skipBuiltin && File.Exists(Path.Combine(extensionPath,"manifest.json")))
                 {
                     CoreWebView2BrowserExtension? extension=null;
                     string markerPath=Path.Combine(profile,"nova-blocker.json");
@@ -245,27 +259,17 @@ sealed class MediaWindow : Form
                 else if(e.KeyCode==Keys.Escape && web.CoreWebView2.ContainsFullScreenElement)command="exit-fullscreen";
                 if(command.Length>0) {e.Handled=true;e.SuppressKeyPress=true;Send(new {type="shortcut",value=command});}
             };
-            web.CoreWebView2.ContextMenuRequested += (_, e) => {
-                e.Handled=true;
-                var menu=new ContextMenuStrip { BackColor=Color.FromArgb(16,11,25),ForeColor=Color.FromArgb(226,214,240), ShowImageMargin=false, Padding=new Padding(6),Font=new Font("Segoe UI",9),Renderer=new NovaMenuRenderer() };
-                void Add(string title,Action callback) { var item=new ToolStripMenuItem(title) { Padding=new Padding(10,5,10,5) };item.Click+=(_,_)=>callback();menu.Items.Add(item); }
-                var link=e.ContextMenuTarget.LinkUri;
-                if(!string.IsNullOrEmpty(link) && SafeUrl(link)) {
-                    Add("Ouvrir dans un nouvel onglet",()=>Send(new { type="open-tab",value=link }));
-                    Add("Copier l’adresse du lien",()=>Send(new {type="copy-link",value=link}));menu.Items.Add(new ToolStripSeparator());
-                }
-                    Add("Retour",()=>{ if(web.CanGoBack)web.GoBack();else Send(new {type="back-home"}); });
-                Add("Suivant",()=>{ if(web.CanGoForward)web.GoForward(); });
-                Add("Actualiser",()=>web.Reload());
-                if(!string.IsNullOrEmpty(e.ContextMenuTarget.SelectionText))Add("Copier la sélection",()=>Clipboard.SetText(e.ContextMenuTarget.SelectionText));
-                if(e.ContextMenuTarget.IsEditable)Add("Coller",()=>web.CoreWebView2.ExecuteScriptAsync("document.execCommand('paste')"));
-                menu.Items.Add(new ToolStripSeparator());
-                Add("Capture de la page",()=>Send(new {type="shortcut",value="capture"}));
-                Add("Protection du site",()=>Send(new {type="shortcut",value="site"}));
-                Add("Traduire en français",()=>Send(new {type="translate",value=e.ContextMenuTarget.SelectionText??""}));
-                Add("Paramètres Nova",()=>Send(new {type="open-settings"}));
-                Add("Réglages du bloqueur",()=>{if(blockerId.Length>0)web.CoreWebView2.Navigate("chrome-extension://"+blockerId+"/dashboard.html");});
-                menu.Closed+=(_,_)=>menu.Dispose();menu.Show(web,e.Location);
+            web.CoreWebView2.ContextMenuRequested += async (_, e) => {
+                var id=Guid.NewGuid().ToString("N");var deferral=e.GetDeferral();e.Handled=true;
+                foreach(var pending in contexts.Values){pending.Args.SelectedCommandId=-1;pending.Deferral.Complete();}contexts.Clear();
+                contexts[id]=(e,deferral);
+                var target=e.ContextMenuTarget;
+                string source=target.HasSourceUri?target.SourceUri:"";
+                string link=target.HasLinkUri?target.LinkUri:"",selection=target.HasSelection?target.SelectionText:"",kind=target.Kind.ToString();bool editable=target.IsEditable;int x=e.Location.X,y=e.Location.Y;
+                var items=e.MenuItems.Where(item=>item.Kind==CoreWebView2ContextMenuItemKind.Command).Select(item=>new {name=item.Name,command=item.CommandId,enabled=item.IsEnabled}).ToArray();
+                try{string js="(()=>{const e=document.elementFromPoint("+x+","+y+");const image=e?.closest('img')||e?.closest('[data-test-id=\"pin\"]')?.querySelector('img');return image?.currentSrc||image?.src||'';})()";string found=JsonSerializer.Deserialize<string>(await web.ExecuteScriptAsync(js))??"";if(found.Length>0)source=found;}catch{}
+                Send(new {type="context-menu",id,x,y,kind,link,source,selection,editable,items});
+                var timeout=new System.Windows.Forms.Timer{Interval=60000};timeout.Tick+=(_,_)=>{timeout.Stop();timeout.Dispose();if(contexts.Remove(id,out var pending)){pending.Args.SelectedCommandId=-1;pending.Deferral.Complete();}};timeout.Start();
             };
             web.CoreWebView2.PermissionRequested+=(_,e)=>{
                 e.SavesInProfile=false;
@@ -275,6 +279,7 @@ sealed class MediaWindow : Form
                 var timeout=new System.Windows.Forms.Timer{Interval=60000};timeout.Tick+=(_,_)=>{timeout.Stop();timeout.Dispose();if(permissions.Remove(id,out var pending)){pending.Args.State=CoreWebView2PermissionState.Deny;pending.Deferral.Complete();}};timeout.Start();
             };
             web.CoreWebView2.DownloadStarting+=(_,e)=>{
+                if(selfTest){e.Handled=true;e.ResultFilePath=Path.Combine(profile,"nova-image-test.png");return;}
                 e.Handled=true;var deferral=e.GetDeferral();string id=Guid.NewGuid().ToString("N");downloadRequests[id]=(e,deferral);
                 Send(new {type="download-request",id,name=Path.GetFileName(e.ResultFilePath),url=e.DownloadOperation.Uri});
                 var timeout=new System.Windows.Forms.Timer{Interval=60000};timeout.Tick+=(_,_)=>{timeout.Stop();timeout.Dispose();if(downloadRequests.Remove(id,out var pending)){pending.Args.Cancel=true;pending.Deferral.Complete();}};timeout.Start();
@@ -310,6 +315,7 @@ sealed class MediaWindow : Form
                     if (cmd == "navigate" && SafeUrl(value)) {trustedHosts.Add(new Uri(value).Host);web.CoreWebView2.Navigate(value);}
                     else if (cmd == "back") { if(web.CanGoBack)web.GoBack();else Send(new {type="back-home"}); }
                     else if (cmd == "forward" && web.CanGoForward) web.GoForward();
+                    else if(cmd=="exit-fullscreen")_=web.ExecuteScriptAsync("if(document.fullscreenElement)document.exitFullscreen().catch(()=>{});");
                     else if (cmd == "reload") web.Reload();
                     else if (cmd == "focus") web.Focus();
                     else if (cmd == "reparent" && long.TryParse(value,out long handle)) {parent=new IntPtr(handle);SetParent(Handle,parent);}
@@ -324,6 +330,12 @@ sealed class MediaWindow : Form
                     else if(cmd=="mute")web.CoreWebView2.IsMuted=value=="on";
                     else if(cmd=="allow-http")httpHosts.Add(value);
                     else if(cmd=="permission-result")PermissionResult(value);
+                    else if(cmd=="context-result")ContextResult(value);
+                    else if(cmd=="save-image")_=SaveImage(value);
+                    else if(cmd=="extensions-list")_=Extensions("list",value);
+                    else if(cmd=="extensions-enable")_=Extensions("enable",value);
+                    else if(cmd=="extensions-remove")_=Extensions("remove",value);
+                    else if(cmd=="extensions-restore")_=Extensions("restore",value);
                     else if(cmd=="download-answer")DownloadAnswer(value);
                     else if(cmd=="download-control")DownloadControl(value);
                     else if(cmd=="capture")_=CapturePage(value);
@@ -348,6 +360,31 @@ sealed class MediaWindow : Form
             LockContent();if(web.Visible)throw new InvalidOperationException("Locked content still visible");await ResumeMedia(false);if(!web.Visible||contentLocked)throw new InvalidOperationException("Unlock failed");
             using var stream=new MemoryStream();await web.CoreWebView2.CapturePreviewAsync(CoreWebView2CapturePreviewImageFormat.Png,stream);
             if(stream.Length<100)throw new InvalidOperationException("Capture failed");
+            await web.ExecuteScriptAsync("document.body.innerHTML='';document.body.style.margin='0';var img=document.createElement('img');img.width=100;img.height=100;img.src="+JsonSerializer.Serialize(testImageUrl)+";document.body.appendChild(img);");
+            await Task.Delay(300);
+            await web.CoreWebView2.CallDevToolsProtocolMethodAsync("Input.dispatchMouseEvent","{\"type\":\"mousePressed\",\"x\":40,\"y\":40,\"button\":\"right\",\"clickCount\":1}");
+            await web.CoreWebView2.CallDevToolsProtocolMethodAsync("Input.dispatchMouseEvent","{\"type\":\"mouseReleased\",\"x\":40,\"y\":40,\"button\":\"right\",\"clickCount\":1}");
+            for(int i=0;i<30 && contexts.Count==0;i++)await Task.Delay(100);
+            if(contexts.Count==0)throw new InvalidOperationException("Image context event missing");
+            var context=contexts.First();var save=context.Value.Args.MenuItems.FirstOrDefault(item=>item.Name=="saveImageAs" && item.IsEnabled);
+            if(save==null)throw new InvalidOperationException("Native image save command missing");
+            ContextResult(JsonSerializer.Serialize(new {id=context.Key,command=-1}));
+            await SaveImage(JsonSerializer.Serialize(new {id="image-test",path=Path.Combine(profile,"nova-image-test.png"),url=testImageUrl}));
+            string imagePath=Path.Combine(profile,"nova-image-test.png");
+            for(int i=0;i<50 && !File.Exists(imagePath);i++)await Task.Delay(100);
+            var saved=File.Exists(imagePath)?await File.ReadAllBytesAsync(imagePath):Array.Empty<byte>();
+            if(saved.Length<8||saved[0]!=137||saved[1]!=80||saved[2]!=78||saved[3]!=71)throw new InvalidOperationException("Image save did not create a PNG");
+            if(blocker!=null){
+                string extension=blocker.Id;
+                await Extensions("enable",JsonSerializer.Serialize(new {id=extension,enabled=false}));
+                if((await web.CoreWebView2.Profile.GetBrowserExtensionsAsync()).First(item=>item.Id==extension).IsEnabled)throw new InvalidOperationException("Extension disable failed");
+                await Extensions("enable",JsonSerializer.Serialize(new {id=extension,enabled=true}));
+                if(!(await web.CoreWebView2.Profile.GetBrowserExtensionsAsync()).First(item=>item.Id==extension).IsEnabled)throw new InvalidOperationException("Extension enable failed");
+                await Extensions("remove",JsonSerializer.Serialize(new {id=extension}));
+                if((await web.CoreWebView2.Profile.GetBrowserExtensionsAsync()).Any(item=>item.Id==extension))throw new InvalidOperationException("Extension removal failed");
+                await Extensions("restore","{}");
+                if(blocker==null||!blocker.IsEnabled)throw new InvalidOperationException("Extension restore failed");
+            }
             Send(new {type="self-test",ok=true,privateMode});
         }catch(Exception error){Send(new {type="self-test",ok=false,error=error.Message});Environment.ExitCode=2;}
         Close();
@@ -417,6 +454,80 @@ sealed class MediaWindow : Form
         bool ok=false;try{if(mode=="pdf")ok=await web.CoreWebView2.PrintToPdfAsync(path);else{using var stream=File.Create(path);await web.CoreWebView2.CapturePreviewAsync(CoreWebView2CapturePreviewImageFormat.Png,stream);ok=true;}}catch{}
         Send(new {type="screenshot",ok,path,mode});
     }
+    void ContextResult(string json)
+    {
+        using var doc=JsonDocument.Parse(json);var root=doc.RootElement;
+        if(!contexts.Remove(root.GetProperty("id").GetString()??"",out var pending))return;
+        int command=root.GetProperty("command").GetInt32();
+        pending.Args.SelectedCommandId=pending.Args.MenuItems.Any(item=>item.CommandId==command && item.IsEnabled)?command:-1;
+        pending.Deferral.Complete();
+    }
+    async Task Extensions(string action,string json)
+    {
+        try{
+            string builtin=blockerId;
+            try{using var marker=JsonDocument.Parse(File.ReadAllText(Path.Combine(profile,"nova-blocker.json")));builtin=marker.RootElement.GetProperty("id").GetString()??builtin;}catch{}
+            string affected="";bool removed=false;
+            if(action=="restore"){
+                string path=Path.Combine(AppContext.BaseDirectory,"Extensions","ubol");
+                blocker=await web.CoreWebView2.Profile.AddBrowserExtensionAsync(path);blockerId=blocker.Id;builtin=blocker.Id;await blocker.EnableAsync(true);affected=builtin;
+                string stamp=Path.GetFullPath(path)+"|"+File.GetLastWriteTimeUtc(Path.Combine(path,"manifest.json")).Ticks;File.WriteAllText(Path.Combine(profile,"nova-blocker.json"),JsonSerializer.Serialize(new {stamp,id=builtin}));
+            }else if(action!="list"){
+                using var doc=JsonDocument.Parse(json);affected=doc.RootElement.GetProperty("id").GetString()??"";
+                var extension=(await web.CoreWebView2.Profile.GetBrowserExtensionsAsync()).FirstOrDefault(item=>item.Id==affected)??throw new IOException("Extension introuvable");
+                if(action=="remove"){await extension.RemoveAsync();removed=true;if(affected==builtin){blocker=null;blockerId="";}}
+                else if(action=="enable")await extension.EnableAsync(doc.RootElement.GetProperty("enabled").GetBoolean());
+            }
+            var installed=await web.CoreWebView2.Profile.GetBrowserExtensionsAsync();
+            // WebView2 also returns its internal PDF and clipboard components;
+            // those are runtime services, not user-installed extensions.
+            Send(new {type="extensions-state",affected,removed,builtin,items=installed.Where(item=>item.Id!="mhjfbmdgcfjbbpaeojofohoefgiehjai" && item.Id!="dgiklkfkllikcanfonkcabmbdfmgleag").Select(item=>new {id=item.Id,name=item.Name,enabled=item.IsEnabled,builtin=item.Id==builtin}).ToArray()});
+        }catch(Exception error){Send(new {type="extensions-error",message=error.Message});}
+    }
+    async Task<byte[]> ImageBytes(string url)
+    {
+        const int limit=50*1024*1024;
+        if(url.StartsWith("data:image/",StringComparison.OrdinalIgnoreCase)){
+            int comma=url.IndexOf(',');if(comma<0||url.Length>limit*1.4)throw new IOException("Image trop volumineuse");
+            return url[..comma].EndsWith(";base64",StringComparison.OrdinalIgnoreCase)?Convert.FromBase64String(url[(comma+1)..]):System.Text.Encoding.UTF8.GetBytes(Uri.UnescapeDataString(url[(comma+1)..]));
+        }
+        if(!Uri.TryCreate(url,UriKind.Absolute,out var uri)||(uri.Scheme!="https"&&uri.Scheme!="http"&&uri.Scheme!="blob"))throw new IOException("Adresse d’image non prise en charge");
+        using var tree=JsonDocument.Parse(await web.CoreWebView2.CallDevToolsProtocolMethodAsync("Page.getFrameTree","{}"));string frame=tree.RootElement.GetProperty("frameTree").GetProperty("frame").GetProperty("id").GetString()!;
+        try{
+            using var resource=JsonDocument.Parse(await web.CoreWebView2.CallDevToolsProtocolMethodAsync("Page.getResourceContent",JsonSerializer.Serialize(new {frameId=frame,url})));
+            string content=resource.RootElement.GetProperty("content").GetString()??"";if(content.Length>limit*1.4)throw new IOException("Image trop volumineuse");
+            return resource.RootElement.GetProperty("base64Encoded").GetBoolean()?Convert.FromBase64String(content):System.Text.Encoding.UTF8.GetBytes(content);
+        }catch when(uri.Scheme!="blob"){}
+        using var response=JsonDocument.Parse(await web.CoreWebView2.CallDevToolsProtocolMethodAsync("Network.loadNetworkResource",JsonSerializer.Serialize(new {frameId=frame,url,options=new {disableCache=false,includeCredentials=true}})));
+        var data=response.RootElement.GetProperty("resource");if(!data.GetProperty("success").GetBoolean()||!data.TryGetProperty("stream",out var stream))throw new IOException("Le serveur n’a pas transmis l’image");
+        string handle=stream.GetString()!;
+        try{
+            using var result=new MemoryStream();
+            while(true){
+                using var part=JsonDocument.Parse(await web.CoreWebView2.CallDevToolsProtocolMethodAsync("IO.read",JsonSerializer.Serialize(new {handle,size=65536})));
+                string text=part.RootElement.GetProperty("data").GetString()??"";byte[] chunk=part.RootElement.TryGetProperty("base64Encoded",out var encoded)&&encoded.GetBoolean()?Convert.FromBase64String(text):System.Text.Encoding.UTF8.GetBytes(text);
+                if(result.Length+chunk.Length>limit)throw new IOException("Image trop volumineuse");await result.WriteAsync(chunk);
+                if(part.RootElement.GetProperty("eof").GetBoolean())break;
+            }
+            return result.ToArray();
+        }finally{await web.CoreWebView2.CallDevToolsProtocolMethodAsync("IO.close",JsonSerializer.Serialize(new {handle}));}
+    }
+    async Task SaveImage(string json)
+    {
+        string id="",temporary="";
+        try{
+            using var doc=JsonDocument.Parse(json);var root=doc.RootElement;id=root.GetProperty("id").GetString()??"";string path=root.GetProperty("path").GetString()??"",url=root.GetProperty("url").GetString()??"";
+            if(contentLocked||!Path.IsPathFullyQualified(path))throw new IOException("Enregistrement indisponible");
+            Send(new {type="download-state",id,state="DownloadInProgress",received=0,total=0,paused=false,resumable=false});
+            imageJobs.Add(id);byte[] bytes=await ImageBytes(url).WaitAsync(TimeSpan.FromSeconds(30));if(bytes.Length==0)throw new IOException("Image vide");
+            if(cancelledImages.Contains(id))return;
+            temporary=path+".nova-"+Guid.NewGuid().ToString("N")+".part";await File.WriteAllBytesAsync(temporary,bytes);
+            if(cancelledImages.Contains(id))return;
+            File.Move(temporary,path,true);temporary="";
+            Send(new {type="download-state",id,state="DownloadCompleted",received=bytes.Length,total=bytes.Length,paused=false,resumable=false});
+        }catch(Exception error){Send(new {type="download-state",id,state="DownloadInterrupted",received=0,total=0,paused=false,resumable=false,reason=error.Message});}
+        finally{imageJobs.Remove(id);cancelledImages.Remove(id);if(temporary.Length>0)try{File.Delete(temporary);}catch{}}
+    }
     void DownloadAnswer(string json)
     {
         using var doc=JsonDocument.Parse(json);string id=doc.RootElement.GetProperty("id").GetString()??"";
@@ -429,8 +540,10 @@ sealed class MediaWindow : Form
     }
     void DownloadControl(string json)
     {
-        using var doc=JsonDocument.Parse(json);if(!downloads.TryGetValue(doc.RootElement.GetProperty("id").GetString()??"",out var op))return;
+        using var doc=JsonDocument.Parse(json);string id=doc.RootElement.GetProperty("id").GetString()??"";
         string action=doc.RootElement.GetProperty("action").GetString()??"";
+        if(imageJobs.Contains(id)){if(action=="cancel"){cancelledImages.Add(id);Send(new {type="download-state",id,state="DownloadCancelled",received=0,total=0,paused=false,resumable=false});}return;}
+        if(!downloads.TryGetValue(id,out var op))return;
         if(action=="pause")op.Pause();else if(action=="resume" && op.CanResume)op.Resume();else if(action=="cancel")op.Cancel();
     }
     async Task FillForm(string value)
@@ -476,13 +589,20 @@ sealed class MediaWindow : Form
 }
 sealed class NovaMenuRenderer : ToolStripProfessionalRenderer
 {
+    static System.Drawing.Drawing2D.GraphicsPath Round(Rectangle r,int radius)
+    {
+        int d=radius*2;var path=new System.Drawing.Drawing2D.GraphicsPath();path.AddArc(r.Left,r.Top,d,d,180,90);path.AddArc(r.Right-d,r.Top,d,d,270,90);path.AddArc(r.Right-d,r.Bottom-d,d,d,0,90);path.AddArc(r.Left,r.Bottom-d,d,d,90,90);path.CloseFigure();return path;
+    }
+    public static Region CreateRegion(Size size){using var path=Round(new Rectangle(Point.Empty,size),10);return new Region(path);}
     protected override void OnRenderMenuItemBackground(ToolStripItemRenderEventArgs e)
     {
-        using var brush=new SolidBrush(e.Item.Selected?Color.FromArgb(40,23,61):Color.FromArgb(16,11,25));
-        e.Graphics.FillRectangle(brush,new Rectangle(Point.Empty,e.Item.Size));
+        e.Graphics.SmoothingMode=System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+        if(e.Item.Selected){using var brush=new SolidBrush(Color.FromArgb(48,48,55));using var path=Round(new Rectangle(2,1,e.Item.Width-4,e.Item.Height-2),6);e.Graphics.FillPath(brush,path);}
     }
+    protected override void OnRenderImageMargin(ToolStripRenderEventArgs e)
+    {using var brush=new SolidBrush(Color.FromArgb(25,25,29));e.Graphics.FillRectangle(brush,e.AffectedBounds);}
+    protected override void OnRenderSeparator(ToolStripSeparatorRenderEventArgs e)
+    {using var pen=new Pen(Color.FromArgb(51,51,59));e.Graphics.DrawLine(pen,10,e.Item.Height/2,e.Item.Width-10,e.Item.Height/2);}
     protected override void OnRenderToolStripBorder(ToolStripRenderEventArgs e)
-    {
-        using var pen=new Pen(Color.FromArgb(53,32,72));e.Graphics.DrawRectangle(pen,0,0,e.ToolStrip.Width-1,e.ToolStrip.Height-1);
-    }
+    {e.Graphics.SmoothingMode=System.Drawing.Drawing2D.SmoothingMode.AntiAlias;using var pen=new Pen(Color.FromArgb(57,57,64));using var path=Round(new Rectangle(0,0,e.ToolStrip.Width-1,e.ToolStrip.Height-1),10);e.Graphics.DrawPath(pen,path);}
 }

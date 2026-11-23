@@ -5,6 +5,27 @@ def render_home(data):
     return build_home(HOME,SHORTCUTS,data)
 
 ICONS = {
+ 'tabs':'<path d="M8 3h13v13M3 8h13v13H3Z"/>',
+ 'history':'<path d="M3 11a9 9 0 1 1 2 7M3 4v7h7M12 7v6l4 2"/>',
+ 'private':'<path d="M20 15a8 8 0 0 1-11-11A8.5 8.5 0 1 0 20 15Z"/>',
+ 'lock':'<rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3M12 14v3"/>',
+ 'page':'<path d="M14 3H5v18h14V8Zm0 0v5h5M8 12h8M8 16h6"/>',
+ 'folder':'<path d="M3 7h7l2 2h9v12H3Z"/><path d="M3 7V4h7l2 3h7v2"/>',
+ 'import':'<path d="M12 3v12m-4-4 4 4 4-4M4 17v4h16v-4"/>',
+ 'trash':'<path d="M4 6h16M9 3h6M6 6l1 15h10l1-15M10 10v7M14 10v7"/>',
+ 'translate':'<path d="M3 5h12M9 3v2M5 5c0 6 5 10 9 11M13 5c-1 5-4 9-9 12M14 21l4-10 4 10M16 17h4"/>',
+ 'capture':'<path d="M8 3H3v5M16 3h5v5M3 16v5h5M21 16v5h-5"/><rect x="7" y="7" width="10" height="10" rx="2"/>',
+ 'notes':'<rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/>',
+ 'sound':'<path d="m11 5-6 5H2v4h3l6 5ZM15 8c3 2 3 6 0 8M18 5c5 4 5 10 0 14"/>',
+ 'display':'<rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8M12 17v4"/>',
+ 'focus':'<path d="M3 9V3h6M15 3h6v6M21 15v6h-6M9 21H3v-6"/><circle cx="12" cy="12" r="3"/>',
+ 'performance':'<path d="m13 2-9 12h7l-1 8 10-13h-7Z"/>',
+ 'info':'<circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7v.1"/>',
+ 'copy':'<rect x="8" y="8" width="12" height="13" rx="2"/><path d="M16 8V3H3v14h5"/>',
+ 'paste':'<path d="M8 5H4v16h16V5h-4"/><rect x="8" y="3" width="8" height="4" rx="1"/><path d="M8 12h8M8 16h6"/>',
+ 'pin':'<path d="m8 3 9 0-1 6 4 4H5l4-4ZM12 13v9"/>',
+ 'sleep':'<path d="M4 7h7l-7 10h7M15 3h6l-6 8h6"/>',
+
  'shield':'<path d="M12 2 3 6v6c0 5 9 10 9 10s9-5 9-10V6Z"/><path d="m8 12 3 3 5-6"/>',
  'menu':'<path d="M4 6h16M4 12h16M4 18h16"/>',
  'back':'<path d="m14 5-7 7 7 7M7 12h14"/>',

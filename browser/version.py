@@ -1,7 +1,7 @@
 import os,re
 from pathlib import Path
 
-VERSION='4.1.0'
+VERSION='4.2.0'
 REPOSITORY='zyko144/Nova'
 RELEASE_ASSET='NovaBrowser-Windows-x64.zip'
 GOOGLE_DESKTOP_CLIENT_ID='54433304112-0h0sotfg4l7ql274mk9l5grjg1bhgjj1.apps.googleusercontent.com'

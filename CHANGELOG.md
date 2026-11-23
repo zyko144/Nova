@@ -1,3 +1,12 @@
+## 4.2.0 — Menus, images et téléchargements
+
+- Menus Nova et clic droit organisés par catégories, avec des icônes homogènes.
+- Clic droit du moteur compatible affiché par Nova au-dessus des pages intégrées. Choix du dossier dans Nova et enregistrement des images chargées, y compris les adresses temporaires.
+- Téléchargements sous leur icône : progression, débit en Mo/s, pause/reprise lorsque disponible, annulation et retrait de la liste sans effacer le fichier.
+- Liste des extensions installées dans le profil compatible, activation/désactivation, suppression et restauration du bloqueur. Les composants internes PDF/presse-papiers du moteur ne sont pas présentés comme des extensions utilisateur.
+- Retour du plein écran vidéo vers l’état précédent du navigateur.
+- Fondus discrets, sans attendre pour fermer un onglet, désactivables dans Apparence.
+
 ## 4.1.0 — Confidentialité et accès privé
 
 - Réglage général « Services de texte en ligne » et contrôles séparés pour les suggestions et la traduction. Arrêt des requêtes de suggestions en cours à la désactivation ; recherches validées et messages des sites inchangés.
