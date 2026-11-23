@@ -1,5 +1,9 @@
 # Historique
 
+## 3.8.2
+
+- Nettoyage explicite des profils WebEngine entre les tests pour fiabiliser la validation Windows complète.
+
 ## 3.8.1
 
 - Carte d'accueil pour choisir Nova comme navigateur par défaut dans les paramètres Windows.

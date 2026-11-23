@@ -5,11 +5,17 @@ sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from ai_suggestions import permitted,clean_values
 from main import QApplication,Browser,Qt
 from onboarding import Welcome
+from PySide6.QtCore import QCoreApplication,QEvent
 
 class AITest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.app=QApplication.instance() or QApplication([]);cls.app.setApplicationName('NovaAIIntegration-'+uuid.uuid4().hex)
+    def tearDown(self):
+        # Release WebEngine profiles between tests rather than waiting for cyclic GC.
+        for widget in self.app.topLevelWidgets():
+            if isinstance(widget,Browser):widget.close();widget.deleteLater()
+        QCoreApplication.sendPostedEvents(None,QEvent.Type.DeferredDelete);self.app.processEvents()
     def test_search_scope_and_sanitized_output(self):
         self.assertTrue(permitted('mai'));self.assertFalse(permitted('https://private.test/path'));self.assertFalse(permitted('person@example.test'));self.assertFalse(permitted('gsk_fixture-secret'))
         self.assertEqual(clean_values('{"suggestions":["maison","mail","https://bad.test","maison",4]}','mai'),['maison','mail'])
