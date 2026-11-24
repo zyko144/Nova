@@ -173,6 +173,7 @@ class Browser(Features,QMainWindow):
         self.profile.setHttpCacheMaximumSize(256 * 1024 * 1024)
         self.profile.setPersistentCookiesPolicy(QWebEngineProfile.PersistentCookiesPolicy.NoPersistentCookies if private else QWebEngineProfile.PersistentCookiesPolicy.ForcePersistentCookies)
         self.profile.downloadRequested.connect(self.download)
+        self.profile.setNotificationPresenter(self.present_site_notification)
         self.tabs = QTabWidget()
         self.tabs.setAutoFillBackground(True)
         palette=self.tabs.palette();palette.setColor(QPalette.ColorRole.Window,QColor('#07060e'));self.tabs.setPalette(palette)
@@ -717,7 +718,18 @@ class Browser(Features,QMainWindow):
         else:
             page.home_pending=True
             view.setHtml(self.home_markup(),QUrl('about:blank'))
+            view._focus_new_tab=True
+            self.focus_new_tab(view)
         return view
+    def focus_new_tab(self,view):
+        if self._private_locked or self.current() is not view:return
+        self.address.setFocus(Qt.FocusReason.ShortcutFocusReason);self.address.selectAll()
+        def restore():
+            from shiboken6 import isValid
+            if not isValid(self) or not isValid(view):return
+            if self.current() is view and getattr(view,'_focus_new_tab',False) and not self._private_locked:
+                self.address.setFocus(Qt.FocusReason.ShortcutFocusReason)
+        QTimer.singleShot(0,restore)
     def home(self):
         if isinstance(self.current(),MediaView):self.restore_previous(self.current(),home=True);return
         if isinstance(self.current(),InternalPage):
@@ -744,7 +756,7 @@ class Browser(Features,QMainWindow):
         if hasattr(self,'_session_timer') and self._session_ready:self._session_timer.start()
         if isinstance(view,MediaView):
             if view.previous_view is not None:view.previous_view.page().deleteLater();view.previous_view.deleteLater();view.previous_view=None
-            view.stop(); view.deleteLater()
+            if not self.download_panel.retain_view(view):view.stop();view.deleteLater()
         elif isinstance(view,InternalPage):view.deleteLater()
         elif view: view.page().deleteLater(); view.deleteLater()
         if not self.tabs.count(): self.new_tab()
@@ -851,6 +863,9 @@ class Browser(Features,QMainWindow):
         self.bar.actions()[0].setEnabled(back);self.bar.actions()[1].setEnabled(forward)
     def loaded(self,view,ok):
         view._load_ok=bool(ok)
+        if getattr(view,'_focus_new_tab',False):
+            view._focus_new_tab=False
+            if view is self.current() and view.url().scheme()=='about' and not self._private_locked:self.address.setFocus(Qt.FocusReason.ShortcutFocusReason)
         if not ok:
             self.statusBar().showMessage('Chargement impossible ou interrompu.',6000)
             if isinstance(view,QWebEngineView):self.http_failure(view,view.url().toString())
@@ -903,6 +918,7 @@ class Browser(Features,QMainWindow):
             self._closing_window=True
         if getattr(self,"floating",None):self.floating.close()
         if hasattr(self,'extension_panel'):self.extension_panel.hide();self.extension_panel.stop_service()
+        self.download_panel.stop_retained()
         self._session_timer.stop();self.save_session()
         self.save()
         if self.search:self.search.close()

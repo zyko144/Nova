@@ -1,4 +1,5 @@
 from PySide6.QtCore import Qt,QPoint
+from PySide6.QtGui import QPainter,QColor
 from PySide6.QtWidgets import QFrame,QVBoxLayout,QHBoxLayout,QLabel,QToolButton,QApplication
 from menus import menu_icon
 from motion import fade_popup
@@ -6,6 +7,7 @@ from motion import fade_popup
 class AnchorPopup(QFrame):
     def __init__(self,browser,anchor,width=440):
         super().__init__(browser,Qt.WindowType.Popup|Qt.WindowType.FramelessWindowHint);self.browser=browser;self.anchor=anchor;self.setObjectName('novaPopup');self.setFixedWidth(width)
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground,True)
         self.setStyleSheet('QFrame#novaPopup{background:#19191d;border:1px solid #3a3a42;border-radius:12px}QWidget{color:#dcdce4}QLabel{background:transparent;border:0;color:#a3a3af;font-size:12px}QToolButton{background:transparent;border:0;border-radius:6px;padding:5px}QToolButton:hover{background:#33333c}QPushButton{background:#2a2a32;color:#dddde6;border:1px solid #43434e;border-radius:7px;padding:7px 12px}QScrollArea{border:0;background:transparent}QScrollBar:vertical{width:5px;background:transparent}QScrollBar::handle:vertical{background:#4b4b56;border-radius:2px;min-height:25px}QScrollBar::add-line:vertical,QScrollBar::sub-line:vertical{height:0}')
         self.body=QVBoxLayout(self);self.body.setContentsMargins(17,16,17,13);self.body.setSpacing(14)
     def heading(self,title,symbol):
@@ -19,3 +21,5 @@ class AnchorPopup(QFrame):
         self.adjustSize();self.reposition();self.show();self.raise_()
     def showEvent(self,event):
         super().showEvent(event);fade_popup(self,self.browser)
+    def paintEvent(self,event):
+        painter=QPainter(self);painter.setRenderHint(QPainter.RenderHint.Antialiasing);painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_Source);painter.fillRect(self.rect(),Qt.GlobalColor.transparent);painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceOver);painter.setPen(QColor('#3a3a42'));painter.setBrush(QColor(getattr(self,'popup_color','#19191d')));painter.drawRoundedRect(self.rect().adjusted(0,0,-1,-1),16,16)

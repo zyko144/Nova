@@ -55,6 +55,7 @@ sealed class MediaWindow : Form
     readonly Dictionary<string,(CoreWebView2DownloadStartingEventArgs Args,CoreWebView2Deferral Deferral)> downloadRequests=new();
     readonly Dictionary<string,CoreWebView2DownloadOperation> downloads=new();
     readonly HashSet<string> imageJobs=new(),cancelledImages=new();
+    readonly Dictionary<string,CoreWebView2Notification> notifications=new();
     readonly Dictionary<string,(CoreWebView2ContextMenuRequestedEventArgs Args,CoreWebView2Deferral Deferral)> contexts=new();
     readonly HashSet<string> trustedHosts=new(),httpHosts=new();
     readonly List<(CoreWebView2PermissionKind Kind,string Origin)> grantedPermissions=new();
@@ -62,6 +63,9 @@ sealed class MediaWindow : Form
     CoreWebView2Environment? environment;
     string blockerId = "";
     CoreWebView2BrowserExtension? blocker;
+    bool blockerScriptsReady;
+    bool blockingEnabled;
+    static readonly string[] AdHosts={"doubleclick.net","googlesyndication.com","googleadservices.com","adservice.google.com","ads.youtube.com"};
     uint parentThread,ownThread;
     bool inputAttached;
     bool suspendRequested;
@@ -81,6 +85,7 @@ sealed class MediaWindow : Form
         parent = new IntPtr(long.Parse(args[0])); profile = args[1]; initialUrl = args[2];
         probe = args.Contains("--probe");selfTest=args.Contains("--self-test");
         noAdblock = args.Contains("--no-adblock");privateMode=args.Contains("--private");skipBuiltin=args.Contains("--skip-builtin");
+        blockingEnabled=!noAdblock&&!skipBuiltin;
         testImageUrl=args.FirstOrDefault(arg=>arg.StartsWith("--test-image="))?[13..]??"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=";
         if(Uri.TryCreate(initialUrl,UriKind.Absolute,out var initial))trustedHosts.Add(initial.Host);
         FormBorderStyle = FormBorderStyle.None; ShowInTaskbar = parent == IntPtr.Zero;
@@ -165,6 +170,11 @@ sealed class MediaWindow : Form
             environment = await CoreWebView2Environment.CreateAsync(null, profile, options);
             var controller=environment.CreateCoreWebView2ControllerOptions();controller.IsInPrivateModeEnabled=privateMode;
             await web.EnsureCoreWebView2Async(environment,controller);
+            foreach(string host in AdHosts){web.CoreWebView2.AddWebResourceRequestedFilter("*://"+host+"/*",CoreWebView2WebResourceContext.All);web.CoreWebView2.AddWebResourceRequestedFilter("*://*."+host+"/*",CoreWebView2WebResourceContext.All);}
+            web.CoreWebView2.WebResourceRequested+=(_,e)=>{
+                if(!blockingEnabled || !Uri.TryCreate(e.Request.Uri,UriKind.Absolute,out var requested))return;
+                if(AdHosts.Any(host=>requested.Host==host||requested.Host.EndsWith("."+host,StringComparison.OrdinalIgnoreCase)))e.Response=environment.CreateWebResourceResponse(Stream.Null,403,"Blocked by Nova","Content-Type: text/plain\r\nAccess-Control-Allow-Origin: *\r\nAccess-Control-Expose-Headers: X-Nova-Blocked\r\nX-Nova-Blocked: 1");
+            };
             web.CoreWebView2.IsDocumentPlayingAudioChanged+=(_,_)=>Send(new {type="audible",value=web.CoreWebView2.IsDocumentPlayingAudio});
             web.CoreWebView2.FrameCreated+=(_,e)=>TrackFrame(e.Frame);
             web.CoreWebView2.NewWindowRequested += (_, e) => { e.Handled = true;
@@ -177,20 +187,24 @@ sealed class MediaWindow : Form
                 if (!skipBuiltin && File.Exists(Path.Combine(extensionPath,"manifest.json")))
                 {
                     CoreWebView2BrowserExtension? extension=null;
+                    string previousId="";
                     string markerPath=Path.Combine(profile,"nova-blocker.json");
                     string stamp=Path.GetFullPath(extensionPath)+"|"+File.GetLastWriteTimeUtc(Path.Combine(extensionPath,"manifest.json")).Ticks;
                     try {
                         using var marker=JsonDocument.Parse(File.ReadAllText(markerPath));
+                        previousId=marker.RootElement.GetProperty("id").GetString()??"";
                         if(marker.RootElement.GetProperty("stamp").GetString()==stamp) {
                             string? id=marker.RootElement.GetProperty("id").GetString();
                             extension=(await web.CoreWebView2.Profile.GetBrowserExtensionsAsync()).FirstOrDefault(item=>item.Id==id);
                         }
                     } catch { }
                     extension ??= await web.CoreWebView2.Profile.AddBrowserExtensionAsync(extensionPath);
+                    if(previousId.Length>0 && previousId!=extension.Id){var previous=(await web.CoreWebView2.Profile.GetBrowserExtensionsAsync()).FirstOrDefault(item=>item.Id==previousId);if(previous!=null)await previous.RemoveAsync();}
                     File.WriteAllText(markerPath,JsonSerializer.Serialize(new {stamp,id=extension.Id}));
                     blocker=extension;
                     await extension.EnableAsync(!noAdblock);
                     blockerId = extension.Id;
+                    if(!noAdblock)await ConfigureBlocker();
                     Send(new { type="adblock", enabled=extension.IsEnabled, name=extension.Name, id=extension.Id });
                 }
                 else Send(new { type="adblock", enabled=false, name="Extension manquante" });
@@ -278,6 +292,12 @@ sealed class MediaWindow : Form
                 Send(new {type="permission",id,origin=e.Uri,kind=e.PermissionKind.ToString()});
                 var timeout=new System.Windows.Forms.Timer{Interval=60000};timeout.Tick+=(_,_)=>{timeout.Stop();timeout.Dispose();if(permissions.Remove(id,out var pending)){pending.Args.State=CoreWebView2PermissionState.Deny;pending.Deferral.Complete();}};timeout.Start();
             };
+            web.CoreWebView2.NotificationReceived+=(_,e)=>{
+                e.Handled=true;var notification=e.Notification;string id=Guid.NewGuid().ToString("N");notification.ReportShown();
+                if(contentLocked){notification.ReportClosed();return;}
+                notifications[id]=notification;notification.CloseRequested+=(_,_)=>{notifications.Remove(id);Send(new {type="site-notification-close",id});};
+                Send(new {type="site-notification",id,title=notification.Title,body=notification.Body,origin=e.SenderOrigin,silent=notification.IsSilent});
+            };
             web.CoreWebView2.DownloadStarting+=(_,e)=>{
                 if(selfTest){e.Handled=true;e.ResultFilePath=Path.Combine(profile,"nova-image-test.png");return;}
                 e.Handled=true;var deferral=e.GetDeferral();string id=Guid.NewGuid().ToString("N");downloadRequests[id]=(e,deferral);
@@ -330,6 +350,10 @@ sealed class MediaWindow : Form
                     else if(cmd=="mute")web.CoreWebView2.IsMuted=value=="on";
                     else if(cmd=="allow-http")httpHosts.Add(value);
                     else if(cmd=="permission-result")PermissionResult(value);
+                    else if(cmd=="notification-result"){
+                        using var notificationResult=JsonDocument.Parse(value);var root=notificationResult.RootElement;string id=root.GetProperty("id").GetString()??"";
+                        if(notifications.TryGetValue(id,out var notification)){if(root.GetProperty("action").GetString()=="click")notification.ReportClicked();else{notifications.Remove(id);notification.ReportClosed();}}
+                    }
                     else if(cmd=="context-result")ContextResult(value);
                     else if(cmd=="save-image")_=SaveImage(value);
                     else if(cmd=="extensions-list")_=Extensions("list",value);
@@ -354,6 +378,17 @@ sealed class MediaWindow : Form
     {
         try{
             if(privateMode&&!web.CoreWebView2.Profile.IsInPrivateModeEnabled)throw new InvalidOperationException("Private controller not enabled");
+            if(blocker!=null && !privateMode && !blockerScriptsReady)throw new InvalidOperationException("YouTube filtering scripts not ready");
+            if(blocker!=null && !privateMode){
+                bool blocked=false;await web.CoreWebView2.CallDevToolsProtocolMethodAsync("Network.enable","{}");
+                var failures=web.CoreWebView2.GetDevToolsProtocolEventReceiver("Network.loadingFailed");EventHandler<CoreWebView2DevToolsProtocolEventReceivedEventArgs> observer=(_,e)=>{if(e.ParameterObjectAsJson.Contains("ERR_BLOCKED_BY_CLIENT"))blocked=true;};failures.DevToolsProtocolEventReceived+=observer;
+                try{
+                    string expression="fetch('https://googleads.g.doubleclick.net/pagead/id').then(r=>r.headers.get('X-Nova-Blocked')==='1'||r.url.startsWith('chrome-extension://')?'blocked':r.url+' '+r.status).catch(e=>String(e))";
+                    using var evaluated=JsonDocument.Parse(await web.CoreWebView2.CallDevToolsProtocolMethodAsync("Runtime.evaluate",JsonSerializer.Serialize(new {expression,awaitPromise=true,returnByValue=true})).WaitAsync(TimeSpan.FromSeconds(10)));
+                    string marker=evaluated.RootElement.GetProperty("result").TryGetProperty("value",out var status)?status.ToString():"";
+                    if(!blocked && marker!="blocked")throw new InvalidOperationException("Advertising request was not blocked: "+marker);
+                }finally{failures.DevToolsProtocolEventReceived-=observer;}
+            }
             await web.ExecuteScriptAsync("document.body.innerHTML='<input id=nova>';document.getElementById('nova').value='ready';document.title='Nova self test';");
             var result=await web.ExecuteScriptAsync("document.getElementById('nova').value");
             if(result!="\"ready\"")throw new InvalidOperationException("Document unavailable");
@@ -470,13 +505,13 @@ sealed class MediaWindow : Form
             string affected="";bool removed=false;
             if(action=="restore"){
                 string path=Path.Combine(AppContext.BaseDirectory,"Extensions","ubol");
-                blocker=await web.CoreWebView2.Profile.AddBrowserExtensionAsync(path);blockerId=blocker.Id;builtin=blocker.Id;await blocker.EnableAsync(true);affected=builtin;
+                blocker=await web.CoreWebView2.Profile.AddBrowserExtensionAsync(path);blockerId=blocker.Id;builtin=blocker.Id;await blocker.EnableAsync(true);affected=builtin;blockingEnabled=true;
                 string stamp=Path.GetFullPath(path)+"|"+File.GetLastWriteTimeUtc(Path.Combine(path,"manifest.json")).Ticks;File.WriteAllText(Path.Combine(profile,"nova-blocker.json"),JsonSerializer.Serialize(new {stamp,id=builtin}));
             }else if(action!="list"){
                 using var doc=JsonDocument.Parse(json);affected=doc.RootElement.GetProperty("id").GetString()??"";
                 var extension=(await web.CoreWebView2.Profile.GetBrowserExtensionsAsync()).FirstOrDefault(item=>item.Id==affected)??throw new IOException("Extension introuvable");
-                if(action=="remove"){await extension.RemoveAsync();removed=true;if(affected==builtin){blocker=null;blockerId="";}}
-                else if(action=="enable")await extension.EnableAsync(doc.RootElement.GetProperty("enabled").GetBoolean());
+                if(action=="remove"){await extension.RemoveAsync();removed=true;if(affected==builtin){blocker=null;blockerId="";blockingEnabled=false;blockerScriptsReady=false;}}
+                else if(action=="enable"){bool enabled=doc.RootElement.GetProperty("enabled").GetBoolean();await extension.EnableAsync(enabled);if(affected==builtin)blockingEnabled=enabled;}
             }
             var installed=await web.CoreWebView2.Profile.GetBrowserExtensionsAsync();
             // WebView2 also returns its internal PDF and clipboard components;
@@ -536,7 +571,8 @@ sealed class MediaWindow : Form
         if(path.Length==0){pending.Args.Cancel=true;pending.Deferral.Complete();return;}
         pending.Args.ResultFilePath=path;var op=pending.Args.DownloadOperation;downloads[id]=op;
         void Report()=>Send(new {type="download-state",id,received=op.BytesReceived,total=op.TotalBytesToReceive,paused=op.State==CoreWebView2DownloadState.Interrupted,resumable=op.CanResume,reason=op.InterruptReason.ToString(),state=op.InterruptReason==CoreWebView2DownloadInterruptReason.UserCanceled?"DownloadCancelled":op.State==CoreWebView2DownloadState.Completed?"DownloadCompleted":op.State==CoreWebView2DownloadState.Interrupted?"DownloadInterrupted":"DownloadInProgress"});
-        op.BytesReceivedChanged+=(_,_)=>Report();op.StateChanged+=(_,_)=>Report();pending.Deferral.Complete();Report();
+        DateTime lastReport=DateTime.MinValue;
+        op.BytesReceivedChanged+=(_,_)=>{var now=DateTime.UtcNow;if(now-lastReport<TimeSpan.FromMilliseconds(200))return;lastReport=now;Report();};op.StateChanged+=(_,_)=>Report();pending.Deferral.Complete();Report();
     }
     void DownloadControl(string json)
     {
@@ -558,9 +594,29 @@ sealed class MediaWindow : Form
     }
     async Task ToggleBlocker(bool enabled)
     {
+        blockingEnabled=enabled;
         if(blocker==null)return;
         await blocker.EnableAsync(enabled);
+        if(enabled)await ConfigureBlocker();
         Send(new {type="adblock",enabled=blocker.IsEnabled,name=blocker.Name,id=blocker.Id});
+    }
+    async Task ConfigureBlocker()
+    {
+        blockerScriptsReady=false;
+        try{
+            using var check=new WebView2{Width=1,Height=1,Visible=false};Controls.Add(check);
+            var options=environment!.CreateCoreWebView2ControllerOptions();options.IsInPrivateModeEnabled=privateMode;
+            await check.EnsureCoreWebView2Async(environment,options).WaitAsync(TimeSpan.FromSeconds(5));
+            var loaded=new TaskCompletionSource<bool>();check.CoreWebView2.NavigationCompleted+=(_,e)=>loaded.TrySetResult(e.IsSuccess);
+            check.CoreWebView2.Navigate("chrome-extension://"+blockerId+"/dashboard.html");
+            if(!await loaded.Task.WaitAsync(TimeSpan.FromSeconds(5)))throw new IOException("Page du bloqueur indisponible");
+            string expression="(async()=>{await chrome.runtime.sendMessage({what:'setFilteringMode',hostname:'youtube.com',level:2});const level=await chrome.runtime.sendMessage({what:'getFilteringMode',hostname:'youtube.com'});const registered=await chrome.scripting.getRegisteredContentScripts();return {level,main:registered.some(s=>s.world==='MAIN'&&s.id.includes('scriptlet')),rulesets:(await chrome.declarativeNetRequest.getEnabledRulesets()).length,permissions:await chrome.permissions.contains({origins:['<all_urls>']})};})()";
+            using var evaluation=JsonDocument.Parse(await check.CoreWebView2.CallDevToolsProtocolMethodAsync("Runtime.evaluate",JsonSerializer.Serialize(new {expression,awaitPromise=true,returnByValue=true})).WaitAsync(TimeSpan.FromSeconds(5)));
+            if(evaluation.RootElement.TryGetProperty("exceptionDetails",out var exception))throw new IOException(exception.ToString());
+            var value=evaluation.RootElement.GetProperty("result").GetProperty("value");
+            blockerScriptsReady=value.GetProperty("level").GetInt32()>=2 && value.GetProperty("main").GetBoolean() && value.GetProperty("rulesets").GetInt32()>0 && value.GetProperty("permissions").GetBoolean();
+            Send(new {type="adblock-health",ok=blockerScriptsReady,details=value.Clone()});
+        }catch(Exception error){Send(new {type="adblock-health",ok=false,message=error.Message});}
     }
     async Task Probe()
     {

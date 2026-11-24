@@ -25,13 +25,19 @@ def generated_icon(name,size=24):
 DIALOG_STYLE="""QDialog{background:#17171b;color:#eeeeef;border:1px solid #3a3a43;border-radius:12px}QLabel{color:#aaaab5;background:transparent;font-size:13px}QLabel#heading{color:#f0f0f2;font-size:21px;font-weight:600}QLineEdit{background:#101013;color:#e6e6eb;border:1px solid #3b3b44;border-radius:8px;padding:10px;font-size:14px;min-width:250px}QLineEdit:focus{border-color:#9779d1}QPushButton{background:#27272e;color:#dedee5;border:1px solid #42424c;border-radius:7px;padding:8px 14px;font-size:12px}QPushButton:hover{background:#34343d;border-color:#686875}QPushButton#primary{background:#7956bb;color:white;border:0}QPushButton#quiet{background:transparent;border:0;padding:6px;color:#b7b7c2}QPlainTextEdit{background:#111114;color:#dddde2;border:1px solid #3c3c43;border-radius:8px;padding:10px}QCheckBox{color:#bbbcc4;font-size:12px}"""
 
 class NovaDialog(QDialog):
-    def __init__(self,parent,title,subtitle=''):
+    def __init__(self,parent,title,subtitle='',symbol=None):
         super().__init__(parent)
         self.setWindowFlags(Qt.WindowType.Dialog|Qt.WindowType.FramelessWindowHint)
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground)
-        self.setStyleSheet(neutral_style(DIALOG_STYLE) if getattr(parent,'private',False) else DIALOG_STYLE); self.setMinimumWidth(430)
+        style=neutral_style(DIALOG_STYLE) if getattr(parent,'private',False) else DIALOG_STYLE
+        self.setStyleSheet(style+'QDialog{background:transparent;border:0}QLabel#heading{font-size:18px}');self.setMinimumWidth(430)
         self.body=QVBoxLayout(self);self.body.setContentsMargins(26,24,26,24);self.body.setSpacing(16)
-        row=QHBoxLayout();heading=QLabel(title);heading.setObjectName('heading');row.addWidget(heading);row.addStretch()
+        row=QHBoxLayout()
+        if symbol:
+            from menus import menu_icon
+            image=QLabel();image.setFixedSize(28,28);image.setPixmap(menu_icon(symbol,26,'#bbbbbb' if getattr(parent,'private',False) else '#b6a5ea').pixmap(26,26));row.addWidget(image)
+        heading=QLabel(title);heading.setObjectName('heading');row.addWidget(heading);row.addStretch()
         close=QPushButton('×');close.setFixedSize(28,28);close.setObjectName('quiet');close.clicked.connect(self.reject);row.addWidget(close);self.body.addLayout(row)
         if subtitle:
             label=QLabel(subtitle);label.setTextFormat(Qt.TextFormat.PlainText);label.setWordWrap(True);self.body.addWidget(label)
@@ -42,6 +48,14 @@ class NovaDialog(QDialog):
         self.body.addLayout(row);return yes
     def mousePressEvent(self,event):
         if event.position().y()<60 and self.windowHandle():self.windowHandle().startSystemMove()
+    def paintEvent(self,event):
+        painter=QPainter(self);painter.setRenderHint(QPainter.RenderHint.Antialiasing);painter.setPen(QColor('#414147'));painter.setBrush(QColor('#202020'));painter.drawRoundedRect(self.rect().adjusted(0,0,-1,-1),18,18)
+    def showEvent(self,event):
+        super().showEvent(event)
+        from motion import fade_popup
+        owner=self.parentWidget()
+        while owner is not None and not isinstance(getattr(owner,'data',None),dict):owner=owner.parentWidget()
+        fade_popup(self,owner)
 
 class NovaInput:
     @staticmethod
@@ -55,11 +69,17 @@ class NovaMessage:
     StandardButton=OriginalMessageBox.StandardButton
     @staticmethod
     def information(parent,title,text,*args):
-        dialog=NovaDialog(parent,title,text);row=QHBoxLayout();row.addStretch();btn=QPushButton('Compris');btn.setObjectName('primary');btn.clicked.connect(dialog.accept);row.addWidget(btn);dialog.body.addLayout(row);dialog.exec()
+        if isinstance(getattr(parent,'data',None),dict):
+            from notification_effects import sound
+            sound(parent)
+        dialog=NovaDialog(parent,title,text,symbol='info');row=QHBoxLayout();row.addStretch();btn=QPushButton('Compris');btn.setObjectName('primary');btn.clicked.connect(dialog.accept);row.addWidget(btn);dialog.body.addLayout(row);dialog.exec()
         return NovaMessage.StandardButton.Ok
     @staticmethod
     def question(parent,title,text,*args):
-        dialog=NovaDialog(parent,title,text);dialog.buttons('Autoriser','Annuler')
+        if isinstance(getattr(parent,'data',None),dict):
+            from notification_effects import sound
+            sound(parent)
+        dialog=NovaDialog(parent,title,text,symbol='shield');dialog.buttons('Autoriser','Annuler')
         return NovaMessage.StandardButton.Yes if dialog.exec()==QDialog.DialogCode.Accepted else NovaMessage.StandardButton.No
 
 SUGGESTIONS=[('YouTube','https://www.youtube.com'),('Google','https://www.google.com'),('Twitch','https://www.twitch.tv'),('Discord','https://discord.com'),('Spotify','https://open.spotify.com'),('GitHub','https://github.com'),('Reddit','https://www.reddit.com'),('Outlook','https://outlook.live.com')]

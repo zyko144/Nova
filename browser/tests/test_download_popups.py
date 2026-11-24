@@ -33,7 +33,7 @@ class DownloadPopupTest(unittest.TestCase):
             path=Path(folder)/'image.png';path.write_bytes(b'kept');item=NativeDownload(self.view,'download',str(path));panel=self.browser.download_panel;panel.add(item,str(path));row=panel.items[0]
             with patch('downloads.time.monotonic',return_value=11):
                 row.sample=(10,0);row.rate=0;item.update({'received':2000000,'total':10000000});panel.refresh()
-            self.assertEqual(row.bar.value(),20);self.assertIn('2.00 Mo/s',row.status.text());row.pause.click();self.assertEqual(json.loads(self.view.send.call_args.args[1])['action'],'pause')
+            self.assertEqual(row.bar.value(),20);self.assertIn('2,00 Mo/s',row.status.text());row.pause.click();self.assertEqual(json.loads(self.view.send.call_args.args[1])['action'],'pause')
             item.update({'paused':True});row.pause.click();self.assertEqual(json.loads(self.view.send.call_args.args[1])['action'],'resume')
             item.update({'state':'DownloadCompleted'});row.remove();self.assertEqual(path.read_bytes(),b'kept');self.assertFalse(panel.items);self.assertFalse(panel.timer.isActive())
     def test_extensions_use_actual_ids_for_toggle_and_removal(self):

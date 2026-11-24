@@ -3,8 +3,10 @@ from pathlib import Path
 from urllib.parse import urlsplit
 from PySide6.QtCore import Qt,QTimer,QUrl,Signal,QObject,QSize
 from PySide6.QtNetwork import QNetworkAccessManager,QNetworkRequest,QNetworkReply
+from PySide6.QtGui import QPainter,QColor
 from PySide6.QtWidgets import QFrame,QVBoxLayout,QHBoxLayout,QLabel,QPushButton,QApplication,QPlainTextEdit
 from ui import NovaDialog,generated_icon
+from menus import menu_icon
 from version import VERSION,REPOSITORY,RELEASE_ASSET
 
 def version_tuple(value):
@@ -20,23 +22,36 @@ def release_asset(release):
     return None
 
 class UpdateToast(QFrame):
-    def __init__(self,browser,title,message,callback=None,action_text='Voir la mise à jour',symbol='download'):
-        super().__init__(browser,Qt.WindowType.Tool|Qt.WindowType.FramelessWindowHint|Qt.WindowType.WindowDoesNotAcceptFocus)
+    closed=Signal()
+    def __init__(self,browser,title,message,callback=None,action_text='Voir la mise à jour',symbol='download',silent=False):
+        super().__init__(browser,Qt.WindowType.Tool|Qt.WindowType.FramelessWindowHint|Qt.WindowType.WindowDoesNotAcceptFocus);self.browser=browser;self._closed_sent=False;self.silent=silent
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating);self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
         self.setStyleSheet('QFrame{background:#110c19;border:1px solid #4a2a66;border-radius:15px}QLabel{color:#c8b9d8;border:0;background:transparent;font-size:12px}QPushButton{background:#28133d;color:#eee2fa;border:0;border-radius:8px;padding:7px 12px;font-size:12px}')
         if browser.private:
             from ui import neutral_style
             self.setStyleSheet(neutral_style(self.styleSheet()))
-        self.setFixedWidth(345);layout=QVBoxLayout(self);layout.setContentsMargins(18,16,18,16);layout.setSpacing(10)
-        row=QHBoxLayout();symbol_label=QLabel();symbol_label.setPixmap(generated_icon(symbol,24).pixmap(24,24));symbol_label.setFixedSize(28,28);row.addWidget(symbol_label);heading=QLabel(title);heading.setStyleSheet('font-weight:600;color:#f2eafa;font-size:14px');row.addWidget(heading);row.addStretch()
-        close=QPushButton();close.setIcon(generated_icon('close',14));close.setIconSize(QSize(14,14));close.setToolTip('Fermer');close.setFixedSize(24,24);close.setStyleSheet('QPushButton{padding:0;background:transparent;border:0;border-radius:7px}QPushButton:hover{background:#28183a}');close.clicked.connect(self.close);row.addWidget(close);layout.addLayout(row)
+        self.setStyleSheet(self.styleSheet()+"QFrame{background:transparent;border:0}QLabel{color:#bfc0c8}QPushButton{background:#2c2c33;border:1px solid #414147;border-radius:8px}QPushButton:hover{background:#3a3a43}")
+        self.setFixedWidth(350);layout=QVBoxLayout(self);layout.setContentsMargins(18,16,18,16);layout.setSpacing(10)
+        row=QHBoxLayout();symbol_label=QLabel();symbol_label.setPixmap(menu_icon(symbol,24,'#bbbbbb' if browser.private else '#a99adf').pixmap(24,24));symbol_label.setFixedSize(28,28);row.addWidget(symbol_label);heading=QLabel(title);heading.setTextFormat(Qt.TextFormat.PlainText);heading.setStyleSheet('font-weight:600;color:#f2eafa;font-size:14px');heading.ensurePolished();heading.setToolTip(title);heading.setText(heading.fontMetrics().elidedText(title,Qt.TextElideMode.ElideRight,218));heading.setMinimumWidth(0);row.addWidget(heading,1);row.addStretch()
+        close=QPushButton();close.setIcon(menu_icon('close',14));close.setIconSize(QSize(14,14));close.setToolTip('Fermer');close.setFixedSize(24,24);close.setStyleSheet('QPushButton{padding:0;background:transparent;border:0;border-radius:7px}QPushButton:hover{background:#28183a}');close.clicked.connect(self.close);row.addWidget(close);layout.addLayout(row)
         label=QLabel(message);label.setTextFormat(Qt.TextFormat.PlainText);label.setWordWrap(True);layout.addWidget(label)
         if callback:
-            button=QPushButton(action_text);button.clicked.connect(lambda:(self.close(),callback()));layout.addWidget(button,0,Qt.AlignmentFlag.AlignLeft)
+            button=QPushButton(action_text);button.setStyleSheet('QPushButton{background:transparent;border:0;padding:0;color:#75c9ff;text-align:left;font-size:12px}QPushButton:hover{text-decoration:underline}');button.clicked.connect(lambda:(callback(),self.close()));layout.addWidget(button,0,Qt.AlignmentFlag.AlignLeft)
         else:QTimer.singleShot(8000,self.close)
         self.adjustSize();self.reposition(browser);self.show()
+    def paintEvent(self,event):
+        painter=QPainter(self);painter.setRenderHint(QPainter.RenderHint.Antialiasing);painter.setPen(QColor('#414147'));painter.setBrush(QColor('#202020'));painter.drawRoundedRect(self.rect().adjusted(0,0,-1,-1),18,18)
+    def showEvent(self,event):
+        super().showEvent(event)
+        from notification_effects import enter,sound
+        enter(self,self.browser)
+        if not self.silent:sound(self.browser)
+    def closeEvent(self,event):
+        if not self._closed_sent:self._closed_sent=True;self.closed.emit()
+        super().closeEvent(event)
     def reposition(self,browser):
-        point=browser.mapToGlobal(browser.rect().bottomRight());self.move(point.x()-self.width()-20,point.y()-self.height()-20)
+        area=browser.screen().availableGeometry();point=area.bottomRight() if browser.isMinimized() else browser.mapToGlobal(browser.rect().bottomRight());self.move(max(area.left()+12,min(area.right()-self.width()-12,point.x()-self.width()-20)),max(area.top()+12,min(area.bottom()-self.height()-12,point.y()-self.height()-20)))
 
 class Updater(QObject):
     statusChanged=Signal(str)
@@ -59,13 +74,13 @@ class Updater(QObject):
         self.browser.data['last_version']=VERSION;self.browser.save();self.check()
     def focused(self,state):
         if state==Qt.ApplicationState.ApplicationActive and time.monotonic()-self.checked_at>60:self.check()
-    def notify(self,title,message,callback=None,action_text='Voir la mise à jour',symbol='download'):
+    def notify(self,title,message,callback=None,action_text='Voir la mise à jour',symbol='download',silent=False):
         if getattr(self.browser,'_private_locked',False):return
         if self.browser.presentation and title!='Mode présentation':return
         if self.toast:
             try:self.toast.close()
             except RuntimeError:pass
-        self.toast=UpdateToast(self.browser,title,message,callback,action_text,symbol)
+        self.toast=UpdateToast(self.browser,title,message,callback,action_text,symbol,silent);return self.toast
     def check(self,manual=False):
         if self.busy:return
         self.busy=True;self.checked_at=time.monotonic();self.statusChanged.emit('Recherche de mises à jour…')

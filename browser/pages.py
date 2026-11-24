@@ -316,6 +316,7 @@ class SettingsPage(InternalPage):
                 btn=QPushButton();btn.setFixedSize(30,30);btn.setStyleSheet(f'background:{color};border-radius:15px;border:2px solid #281d38');btn.clicked.connect(lambda checked=False,v=color:b.set_accent(v));colors.addWidget(btn)
             colors.addStretch();controls.addLayout(colors);appearance.addLayout(controls,1);c.addLayout(appearance)
             self.toggle(c,'Animations discrètes','animations',True)
+            self.toggle(c,'Son discret des notifications','notification_sounds',True)
             frame,c=card('Onglets','Gérez votre espace de travail.');layout.addWidget(frame)
             self.toggle(c,'Afficher les icônes des onglets','tab_icons',True,b.update_tab_style)
             self.toggle(c,'Utiliser des onglets compacts','compact_tabs',False,b.update_tab_style)

@@ -1,3 +1,12 @@
+## 4.3.0 — Téléchargements et notifications
+
+- Panneau Téléchargements compact inspiré de la référence : icônes de fichiers Windows, lien d’ouverture, recherche et commandes légères.
+- Transferts natifs sans limite ajoutée par Nova, fréquence des mises à jour de progression réduite, et maintien du moteur jusqu’à la fin du transfert lorsqu’un onglet est fermé.
+- Mise à jour des filtres uBlock Origin Lite (2026.1124.1811), vérification des scripts YouTube et activation du mode optimal pour ce domaine. Filtrage complémentaire de domaines publicitaires dans le moteur compatible, désactivé avec le bloqueur.
+- Focus automatique dans la barre d’adresse des nouveaux onglets, conservé après chargement de l’accueil.
+- Autorisations mémorisées par origine en navigation normale, en mémoire uniquement en navigation privée, réinitialisables depuis le bouclier. Suppression des choix temporisés.
+- Notifications Nova et des sites autorisés dans des cartes réellement arrondies, animées, avec un son d’eau local désactivable dans Apparence.
+
 ## 4.2.0 — Menus, images et téléchargements
 
 - Menus Nova et clic droit organisés par catégories, avec des icônes homogènes.

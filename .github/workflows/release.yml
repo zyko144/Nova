@@ -39,6 +39,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Build portable browser
         run: ./browser/build.ps1
+      - name: Verify download survives closing its tab
+        run: python browser/tests/native_transfer_smoke.py
       - name: Smoke test packaged browser
         run: |
           $process = Start-Process browser/dist/Nova/Nova.exe -ArgumentList '--smoke-test' -PassThru -WindowStyle Hidden

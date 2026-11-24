@@ -175,9 +175,10 @@ PNG/zone, export PDF de la page complète, notes, activité des onglets, concent
 et présentation. Les notes privées restent en mémoire. Un clic droit sur un onglet
 permet de l’épingler et de couper son son. Les aperçus d’onglets restent en mémoire.
 
-Le bouclier près de l’adresse ouvre les contrôles du site. Les autorisations sont
-limitées à l’onglet et à une durée (5 minutes pour « Cette fois », 10 minutes pour
-l’autre choix), et peuvent être retirées. L’arrêt d’urgence quitte le document.
+Le bouclier près de l’adresse ouvre les contrôles du site. Les choix d’autorisation
+sont mémorisés par origine (protocole, domaine et port) en navigation normale,
+en mémoire uniquement dans une fenêtre privée. Les contrôles du site permettent
+de les réinitialiser. L’arrêt d’urgence quitte le document.
 Les indicateurs caméra/micro reposent sur les demandes d’autorisation et les pistes
 média instrumentées ; ils ne remplacent pas les indicateurs Windows. Les alertes
 anti-hameçonnage sont des heuristiques locales, pas une liste de réputation exhaustive.

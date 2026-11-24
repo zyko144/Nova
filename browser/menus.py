@@ -62,10 +62,10 @@ def save_context_image(browser,view,url):
     ident=uuid.uuid4().hex;item=NativeDownload(view,ident,path);item.data['supportsPause']=False
     view._downloads=getattr(view,'_downloads',{});view._downloads[ident]=item;browser.download_panel.add(item,path)
     view.send('save-image',json.dumps({'id':ident,'path':path,'url':url}));browser.downloads_menu()
-def menu_icon(name,size=22):
-    key=(name,size)
+def menu_icon(name,size=22,color='#c9c9d2'):
+    key=(name,size,color)
     if key not in _icons:
-        p=QPixmap(size,size);p.fill(Qt.GlobalColor.transparent);r=QSvgRenderer(QByteArray(svg_icon(name,'#c9c9d2').encode()));paint=QPainter(p);r.render(paint);paint.end();_icons[key]=QIcon(p)
+        p=QPixmap(size,size);p.fill(Qt.GlobalColor.transparent);r=QSvgRenderer(QByteArray(svg_icon(name,color).encode()));paint=QPainter(p);r.render(paint);paint.end();_icons[key]=QIcon(p)
     return _icons[key]
 
 class MenuStyle(QProxyStyle):

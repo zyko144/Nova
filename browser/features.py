@@ -212,10 +212,24 @@ class Features:
     def native_security(self,view,data):
         kind=data.get('type')
         if self._private_locked:
+            if kind=='site-notification':view.send('notification-result',json.dumps({'id':str(data.get('id','')),'action':'close'}));return
             if kind=='permission':view.send('permission-result',json.dumps({'id':str(data.get('id','')),'allow':False}));return
             if kind=='download-request':view.send('download-answer',json.dumps({'id':str(data.get('id','')),'path':''}));return
             if kind in ('translate','copy-link','screenshot'):return
-        if kind=='context-menu':
+        if kind=='site-notification':
+            ident=str(data.get('id',''));origin=str(data.get('origin',''));key=(view,ident)
+            def clicked():view.send('notification-result',json.dumps({'id':ident,'action':'click'}))
+            toast=self.updater.notify(str(data.get('title','Notification'))[:160],host_of(origin)+'\n'+str(data.get('body',''))[:700],clicked,action_text='Ouvrir',symbol='info',silent=bool(data.get('silent')))
+            if toast:
+                self._site_toasts=getattr(self,'_site_toasts',{});self._site_toasts[key]=toast
+                def closed():
+                    self._site_toasts.pop(key,None);view.send('notification-result',json.dumps({'id':ident,'action':'close'}))
+                toast.closed.connect(closed)
+            else:view.send('notification-result',json.dumps({'id':ident,'action':'close'}))
+        elif kind=='site-notification-close':
+            toast=getattr(self,'_site_toasts',{}).pop((view,str(data.get('id',''))),None)
+            if toast:toast.close()
+        elif kind=='context-menu':
             from menus import native_context_menu
             native_context_menu(self,view,data)
         elif kind in ('extensions-state','extensions-error'):
@@ -281,21 +295,35 @@ class Features:
             if isinstance(view,MediaView):view.send('emergency')
             elif isinstance(view,QWebEngineView):view.page().setAudioMuted(True);view.stop();view.setUrl(QUrl('about:blank'))
         view._capture_audio=False;view._capture_video=False;self.capture_indicator.hide();self.local_event(view,'Accès caméra et micro retirés'+(' · arrêt de la page' if emergency else ''))
+    def permission_key(self,kind):
+        return {'AudioCapture':'microphone','MediaAudioCapture':'microphone','VideoCapture':'camera','MediaVideoCapture':'camera','MediaAudioVideoCapture':'camera_microphone','Geolocation':'location','Notifications':'notifications'}.get(kind,kind)
+    def present_site_notification(self,notification):
+        if self._private_locked or self.presentation:notification.close();return
+        toast=self.updater.notify(notification.title()[:160],notification.origin().host()+'\n'+notification.message()[:700],notification.click,action_text='Ouvrir',symbol='info')
+        if toast:
+            toast._web_notification=notification;notification.show();toast.closed.connect(notification.close);notification.closed.connect(toast.close)
+        else:notification.close()
     def ask_permission(self,view,origin,kind,deliver):
-        if self._private_locked:deliver(False);return
+        if self._private_locked or self.tabs.indexOf(view)<0 or getattr(view,'_closing',False):deliver(False);return
         if kind in ('ClipboardReadWrite','ClipboardRead'):
             self.local_event(view,'Lecture automatique du presse-papiers bloquée');deliver(False);return
         parsed=urlsplit(origin);origin=parsed.scheme+'://'+parsed.netloc
-        key=(origin,kind);grant=self.grants.get(key)
-        if grant and grant[0]>time.monotonic() and grant[1] is view:deliver(True);return
-        label={'AudioCapture':'Microphone','MediaAudioCapture':'Microphone','VideoCapture':'Caméra','MediaVideoCapture':'Caméra','MediaAudioVideoCapture':'Caméra et microphone','Geolocation':'Position','Notifications':'Notifications'}.get(kind,kind)
-        d=NovaDialog(self,'Autorisation du site',origin+'\n'+label+'\nAccès limité à cet onglet et à la durée choisie.');row=QHBoxLayout()
-        def allow(seconds):
+        if parsed.scheme not in ('https','http') or not parsed.hostname:deliver(False);return
+        key=(origin,kind);permission=self.permission_key(kind);choices=self.data.setdefault('site_permissions',{}).setdefault(origin,{})
+        choice=choices.get(permission)
+        if isinstance(choice,bool):
+            if choice:self.grants[key]=(float('inf'),view)
+            deliver(choice);return
+        label={'microphone':'Accès au microphone','camera':'Accès à la caméra','camera_microphone':'Caméra et microphone','location':'Accès à la position','notifications':'Notifications du site'}.get(permission,'Autorisation du site')
+        d=NovaDialog(self,label,parsed.hostname+'\nVous pourrez modifier ce choix dans les paramètres du site.',symbol='microphone' if permission=='microphone' else 'shield');d.setMinimumWidth(400);row=QHBoxLayout();row.addStretch()
+        def choose(allowed):
             if self.tabs.indexOf(view)<0 or urlsplit(view.url().toString()).netloc!=parsed.netloc or view.url().scheme()!=parsed.scheme:d.reject();return
-            self.grants[key]=(time.monotonic()+seconds,view);deliver(True);d.accept()
-        for text,seconds in [('Cette fois',300),('10 minutes',600)]:
-            b=QPushButton(text);b.clicked.connect(lambda checked=False,s=seconds:allow(s));row.addWidget(b)
-        no=QPushButton('Bloquer');no.clicked.connect(d.reject);row.addWidget(no);d.body.addLayout(row)
+            choices[permission]=allowed
+            if allowed:self.grants[key]=(float('inf'),view)
+            self.save();deliver(allowed);d.accept()
+        no=QPushButton('Bloquer');no.clicked.connect(lambda:choose(False));yes=QPushButton('Autoriser');yes.setObjectName('primary');yes.clicked.connect(lambda:choose(True));row.addWidget(no);row.addWidget(yes);d.body.addLayout(row)
+        from notification_effects import sound
+        sound(self)
         if d.exec()!=d.DialogCode.Accepted:deliver(False)
     def expire_permissions(self):
         Features.cleanup_jobs[:]=[p for p in Features.cleanup_jobs if p.poll() is None]
@@ -352,10 +380,14 @@ class Features:
         if self._private_locked:return
         self.site_popup=self.build_site_panel();anchor=self.bar.widgetForAction(next(a for a in self.bar.actions() if a.text()=='Protection de ce site'));self.site_popup.move(anchor.mapToGlobal(anchor.rect().bottomLeft()));self.site_popup.show()
     def permissions_panel(self,view):
-        host=host_of(view.url().toString());d=NovaDialog(self,'Autorisations',host);now=time.monotonic()
-        for (origin,kind),(expiry,owner) in self.grants.items():
-            if host_of(origin)==host and owner is view:d.body.addWidget(QLabel(kind+' · '+str(max(0,int((expiry-now)/60)))+' min restantes'))
-        b=QPushButton('Retirer tous les accès temporaires');b.clicked.connect(lambda:(self.revoke_site(view),d.accept()));d.body.addWidget(b);d.buttons('Fermer','Annuler');d.exec()
+        parsed=urlsplit(view.url().toString());origin=parsed.scheme+'://'+parsed.netloc;d=NovaDialog(self,'Autorisations',parsed.hostname or 'Page Nova')
+        choices=self.data.get('site_permissions',{}).get(origin,{})
+        names={'microphone':'Microphone','camera':'Caméra','camera_microphone':'Caméra et microphone','location':'Position','notifications':'Notifications'}
+        for kind,allowed in choices.items():d.body.addWidget(QLabel(names.get(kind,kind)+' · '+('Autorisé' if allowed else 'Bloqué')))
+        if not choices:d.body.addWidget(QLabel('Aucune autorisation mémorisée pour ce site.'))
+        def reset():
+            self.data.get('site_permissions',{}).pop(origin,None);self.revoke_site(view);self.save();d.accept()
+        b=QPushButton('Réinitialiser les autorisations du site');b.clicked.connect(reset);d.body.addWidget(b);d.buttons('Fermer','Annuler');d.exec()
     def clear_site(self,view):
         url=view.url().toString();host=host_of(url)
         if not host or NovaMessage.question(self,'Effacer les données de ce site',host+'\nCookies, stockage local et connexions de ce site seront supprimés. Continuer ?')!=NovaMessage.StandardButton.Yes:return

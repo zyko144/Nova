@@ -5,6 +5,7 @@ def render_home(data):
     return build_home(HOME,SHORTCUTS,data)
 
 ICONS = {
+ 'microphone':'<rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3M8 22h8"/>',
  'tabs':'<path d="M8 3h13v13M3 8h13v13H3Z"/>',
  'history':'<path d="M3 11a9 9 0 1 1 2 7M3 4v7h7M12 7v6l4 2"/>',
  'private':'<path d="M20 15a8 8 0 0 1-11-11A8.5 8.5 0 1 0 20 15Z"/>',
