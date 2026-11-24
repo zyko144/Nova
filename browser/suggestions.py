@@ -1,3 +1,4 @@
+from surfaces import round_popup
 from urllib.parse import quote_plus,urlsplit
 from PySide6.QtCore import QStringListModel,Qt,QSize,QRect,QRectF,QTimer,QModelIndex
 from PySide6.QtGui import QColor,QFont,QPainter
@@ -46,6 +47,7 @@ class AddressSuggestions:
         self.completer.setMaxVisibleItems(6);self.completer.popup().setItemDelegate(SuggestionDelegate(self));self.completer.popup().setUniformItemSizes(True);self.completer.popup().setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.completer.popup().setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.completer.popup().setCursor(Qt.CursorShape.ArrowCursor)
+        round_popup(self.completer.popup(),12)
         self.completer.popup().setStyleSheet('QListView{background:#0e0b14;color:#d9cce7;border:1px solid #382b44;border-radius:12px;padding:5px;outline:0}QScrollBar:vertical{width:5px;background:transparent}QScrollBar::handle:vertical{background:#3c2b4e;border-radius:2px}QScrollBar::add-line:vertical,QScrollBar::sub-line:vertical{height:0}')
         browser.address.setCompleter(self.completer);browser.address.textEdited.connect(self.update);self.completer.activated[QModelIndex].connect(self.choose_index)
     def update(self,value):

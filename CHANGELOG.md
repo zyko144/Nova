@@ -1,3 +1,13 @@
+## 4.4.0 — Première ouverture et import
+
+- Écran d’import reprenant la maquette Nova originale, avec des contrôles interactifs et une mascotte dont les yeux s’animent.
+- Sélection du profil et des données à importer dans la présentation. Import local des favoris, de l’historique et des adresses e-mail compatibles. Mots de passe depuis le CSV choisi par l’utilisateur.
+
+## 4.3.1 — Ouverture des fichiers et panneaux arrondis
+
+- Ouverture des téléchargements terminés par double-clic sur leur ligne, nom ou icône, et avec Entrée au clavier. Le lien d’ouverture reste disponible.
+- Fonds des panneaux Protection, téléchargements, extensions, dialogues et notifications arrondis ; menus et suggestions découpés pour supprimer leurs coins opaques.
+
 ## 4.3.0 — Téléchargements et notifications
 
 - Panneau Téléchargements compact inspiré de la référence : icônes de fichiers Windows, lien d’ouverture, recherche et commandes légères.

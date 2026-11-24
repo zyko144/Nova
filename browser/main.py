@@ -292,7 +292,7 @@ class Browser(Features,QMainWindow):
         if self.private or QApplication.applicationName()!='NovaBrowser':return
         if self.previous_session.get('tabs'):
             self.updater.notify('Retrouvez vos onglets','Votre dernière session est disponible.',self.restore_session,action_text='Restaurer la session',symbol='reload')
-        if not self.data.get('welcome_completed'):
+        if not self.data.get('welcome_completed') or not self.data.get('welcome_identity_seen'):
             self.show_welcome()
         else:QTimer.singleShot(4000,self.offer_default_browser)
     def offer_default_browser(self):

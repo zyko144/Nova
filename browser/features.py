@@ -342,11 +342,12 @@ class Features:
     def confirm_close(self,view):
         return not getattr(view,'_dirty',False) or NovaMessage.question(self,'Texte non envoyé','Cet onglet contient du texte saisi dans un formulaire. Fermer et perdre cette saisie ?')==NovaMessage.StandardButton.Yes
     def build_site_panel(self):
+        from surfaces import RoundedFrame
         from PySide6.QtWidgets import QFrame
         from main import icon
         from ui import monochrome
         view=self.current();url=view.url().toString();host=host_of(url) if view.url().scheme() in ('http','https') else ''
-        d=QFrame(self,Qt.WindowType.Popup|Qt.WindowType.FramelessWindowHint);d.setObjectName('sitePanel');d.setFixedWidth(326);d.setStyleSheet('QFrame#sitePanel{background:#19191d;border:1px solid #3a3a41;border-radius:11px}QLabel{color:#a5a5af;border:0;background:transparent;font-size:12px}QPushButton{background:transparent;border:0;border-radius:6px;color:#dddddf;text-align:left;padding:10px 5px;font-size:12px}QPushButton:hover{background:#2b2b31}QPushButton#more{text-align:center;color:#b3b3be;font-size:11px}')
+        d=RoundedFrame(self,Qt.WindowType.Popup|Qt.WindowType.FramelessWindowHint);d.setObjectName('sitePanel');d.setFixedWidth(326);d.setStyleSheet('QFrame#sitePanel{background:#19191d;border:1px solid #3a3a41;border-radius:11px}QLabel{color:#a5a5af;border:0;background:transparent;font-size:12px}QPushButton{background:transparent;border:0;border-radius:6px;color:#dddddf;text-align:left;padding:10px 5px;font-size:12px}QPushButton:hover{background:#2b2b31}QPushButton#more{text-align:center;color:#b3b3be;font-size:11px}')
         layout=QVBoxLayout(d);layout.setContentsMargins(17,16,17,10);layout.setSpacing(2);domain=QLabel(host or 'Page Nova');domain.setTextFormat(Qt.TextFormat.PlainText);domain.setWordWrap(True);domain.setStyleSheet('font-size:15px;font-weight:600;color:#ececef;padding-bottom:4px');layout.addWidget(domain)
         status=QLabel(('Connexion chiffrée · HTTPS' if getattr(view,'_load_ok',None) is True else 'HTTPS · Connexion non confirmée') if url.startswith('https://') else 'Page interne de Nova' if not host else 'Connexion non chiffrée · HTTP');layout.addWidget(status);layout.addSpacing(10)
         def separator():
@@ -424,7 +425,7 @@ class Features:
     def show_tab_preview(self):
         i=self.hover_index
         if self._private_locked or self.presentation or not 0<=i<self.tabs.count() or i==self.tabs.currentIndex():return
-        view=self.top_tabs.tabData(i);p=QLabel(self,Qt.WindowType.ToolTip);p.setStyleSheet('background:#171717;color:#ddd;border:1px solid #333;border-radius:10px;padding:12px;font-size:12px');p.setTextFormat(Qt.TextFormat.PlainText)
+        view=self.top_tabs.tabData(i);p=QLabel(self,Qt.WindowType.ToolTip);from surfaces import round_popup;round_popup(p,10);p.setStyleSheet('background:#171717;color:#ddd;border:1px solid #333;border-radius:10px;padding:12px;font-size:12px');p.setTextFormat(Qt.TextFormat.PlainText)
         preview=getattr(view,'_preview',None)
         if preview is not None and not preview.isNull():p.setPixmap(preview);p.setToolTip(view.title())
         else:p.setText(view.title()[:90]+'\n'+host_of(view.url().toString()))

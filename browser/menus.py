@@ -4,6 +4,7 @@ from PySide6.QtGui import QIcon,QPixmap,QPainter,QFont
 from PySide6.QtSvg import QSvgRenderer
 from PySide6.QtWidgets import QMenu,QProxyStyle,QStyle,QStyleFactory,QApplication,QWidgetAction,QLabel
 from design import svg_icon
+from surfaces import round_popup
 
 _icons={}
 
@@ -75,9 +76,9 @@ class MenuStyle(QProxyStyle):
 
 class NovaMenu(QMenu):
     def __init__(self,parent=None,title=''):
-        super().__init__(title,parent);self.setMinimumWidth(286);self.setFont(QFont('Segoe UI',10));self.setCursor(Qt.CursorShape.ArrowCursor)
+        super().__init__(title,parent);round_popup(self,14);self.setMinimumWidth(286);self.setFont(QFont('Segoe UI',10));self.setCursor(Qt.CursorShape.ArrowCursor)
         self._menu_style=MenuStyle(QStyleFactory.create(QApplication.style().objectName()));self._menu_style.setParent(self);self.setStyle(self._menu_style)
-        self.setStyleSheet('QMenu{background:#19191d;color:#dedee5;border:1px solid #393940;border-radius:11px;padding:6px}QMenu::item{padding:9px 13px;margin:1px 2px;border-radius:6px}QMenu::item:selected{background:#303037;color:#f1f1f4}QMenu::item:disabled{color:#71717c}QMenu::separator{height:1px;background:#33333b;margin:6px 10px}QMenu::icon{padding:0;margin-left:5px}QMenu::right-arrow{width:7px;height:10px}')
+        self.setStyleSheet('QMenu{background:#19191d;color:#dedee5;border:1px solid #393940;border-radius:14px;padding:6px}QMenu::item{padding:9px 13px;margin:1px 2px;border-radius:6px}QMenu::item:selected{background:#303037;color:#f1f1f4}QMenu::item:disabled{color:#71717c}QMenu::separator{height:1px;background:#33333b;margin:6px 10px}QMenu::icon{padding:0;margin-left:5px}QMenu::right-arrow{width:7px;height:10px}')
     def showEvent(self,event):
         super().showEvent(event)
         from motion import fade_popup

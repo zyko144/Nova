@@ -2,7 +2,7 @@ from pathlib import Path
 import time
 from popups import AnchorPopup
 from menus import menu_icon,NovaMenu
-from PySide6.QtCore import Qt,QTimer,QUrl,QObject,Signal,QPoint,QFileInfo,QStandardPaths,QRect
+from PySide6.QtCore import Qt,QTimer,QUrl,QObject,Signal,QPoint,QFileInfo,QStandardPaths,QRect,QEvent
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import QDialog,QVBoxLayout,QHBoxLayout,QLabel,QPushButton,QProgressBar,QScrollArea,QWidget,QToolButton,QLineEdit,QFileIconProvider,QFrame
 
@@ -25,6 +25,18 @@ class DownloadRow(QWidget):
         self.status=QLabel();self.status.setWordWrap(True);self.status.setStyleSheet('font-size:12px;color:#c2c2c2');content.addWidget(self.status)
         self.link=QPushButton('Ouvrir un fichier');self.link.setCursor(Qt.CursorShape.ArrowCursor);self.link.setStyleSheet('QPushButton{color:#75c9ff;background:transparent;border:0;padding:0;text-align:left;font-size:12px}QPushButton:hover{text-decoration:underline}');self.link.clicked.connect(self.open_file);content.addWidget(self.link,0,Qt.AlignmentFlag.AlignLeft)
         self.bar=QProgressBar();self.bar.setTextVisible(False);self.bar.setFixedHeight(3);self.bar.setStyleSheet('QProgressBar{border:0;background:#444448;border-radius:1px}QProgressBar::chunk{background:#55baf0;border-radius:1px}');content.addWidget(self.bar);root.addLayout(content,1);item.stateChanged.connect(panel.refresh)
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        for label in (symbol,self.title,self.status):label.installEventFilter(self)
+    def eventFilter(self,watched,event):
+        if event.type()==QEvent.Type.MouseButtonDblClick and event.button()==Qt.MouseButton.LeftButton:
+            self.open_file();event.accept();return True
+        return super().eventFilter(watched,event)
+    def mouseDoubleClickEvent(self,event):
+        if event.button()==Qt.MouseButton.LeftButton:self.open_file();event.accept()
+        else:super().mouseDoubleClickEvent(event)
+    def keyPressEvent(self,event):
+        if event.key() in (Qt.Key.Key_Return,Qt.Key.Key_Enter):self.open_file();event.accept()
+        else:super().keyPressEvent(event)
     def toggle_pause(self):
         item=self.item
         if item.isPaused() or item.state().name=='DownloadInterrupted':item.resume()
@@ -38,6 +50,7 @@ class DownloadRow(QWidget):
         menu.exec(self.more.mapToGlobal(QPoint(0,self.more.height())));menu.deleteLater()
     def open_file(self):
         if self.item.state().name!='DownloadCompleted':return
+        if not self.path.is_file():self.panel.browser.updater.notify('Fichier introuvable',self.path.name+' a été déplacé ou supprimé.');return
         from security import download_warning
         from ui import NovaMessage
         if download_warning(self.path.name) and NovaMessage.question(self.panel.browser,'Ouvrir le fichier',self.path.name+'\nOuvrir ce fichier téléchargé ?')!=NovaMessage.StandardButton.Yes:return

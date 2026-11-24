@@ -3,8 +3,9 @@ from PySide6.QtGui import QPainter,QColor
 from PySide6.QtWidgets import QFrame,QVBoxLayout,QHBoxLayout,QLabel,QToolButton,QApplication
 from menus import menu_icon
 from motion import fade_popup
+from surfaces import RoundedFrame
 
-class AnchorPopup(QFrame):
+class AnchorPopup(RoundedFrame):
     def __init__(self,browser,anchor,width=440):
         super().__init__(browser,Qt.WindowType.Popup|Qt.WindowType.FramelessWindowHint);self.browser=browser;self.anchor=anchor;self.setObjectName('novaPopup');self.setFixedWidth(width)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground,True)
@@ -21,5 +22,3 @@ class AnchorPopup(QFrame):
         self.adjustSize();self.reposition();self.show();self.raise_()
     def showEvent(self,event):
         super().showEvent(event);fade_popup(self,self.browser)
-    def paintEvent(self,event):
-        painter=QPainter(self);painter.setRenderHint(QPainter.RenderHint.Antialiasing);painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_Source);painter.fillRect(self.rect(),Qt.GlobalColor.transparent);painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceOver);painter.setPen(QColor('#3a3a42'));painter.setBrush(QColor(getattr(self,'popup_color','#19191d')));painter.drawRoundedRect(self.rect().adjusted(0,0,-1,-1),16,16)

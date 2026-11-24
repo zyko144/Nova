@@ -36,6 +36,21 @@ class Vault:
         email=email.strip()[:254]
         if re.fullmatch(r'[^\s@]+@[^\s@]+\.[^\s@]+',email) and email not in self.data['emails']:
             self.data['emails']=(self.data['emails']+[email])[-30:];self.save()
+    def merge_import(self,credentials=(),emails=()):
+        original=self.data;records=list(original.get('credentials',[]));known={(row['origin'],row['username']) for row in records};addresses=list(original.get('emails',[]));added=0;mail_added=0
+        for row in list(credentials)[:500]:
+            origin=secure_origin(str(row.get('url','')));username=str(row.get('username','')).strip()[:254];password=row.get('password','')
+            if not origin or not isinstance(password,str) or not 1<=len(password)<=4096 or (origin,username) in known:continue
+            known.add((origin,username));records.append({'origin':origin,'username':username,'password':password});added+=1
+            if re.fullmatch(r'[^\s@]+@[^\s@]+\.[^\s@]+',username) and username not in addresses:addresses.append(username)
+        for email in list(emails)[:1000]:
+            email=str(email).strip()
+            if len(email)<=254 and re.fullmatch(r'[^\s@]+@[^\s@]+\.[^\s@]+',email) and email not in addresses:addresses.append(email);mail_added+=1
+        if added or mail_added:
+            self.data={**original,'credentials':records[-500:],'emails':addresses[-30:]}
+            try:self.save()
+            except Exception:self.data=original;raise
+        return {'credentials':added,'emails':min(mail_added,30)}
     def put(self,url,username,password):
         origin=secure_origin(url)
         if not origin or not isinstance(password,str) or not 1<=len(password)<=4096:raise ValueError('Identifiant HTTPS invalide')

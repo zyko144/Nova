@@ -45,3 +45,15 @@ class BrowserPolishTest(unittest.TestCase):
         try:
             with patch('PySide6.QtMultimedia.QSoundEffect') as effect:sound(self.b);effect.assert_not_called()
         finally:self.app.setApplicationName(original)
+    def test_double_click_opens_only_completed_downloads(self):
+        import tempfile
+        from PySide6.QtCore import QPoint
+        with tempfile.TemporaryDirectory() as folder:
+            path=Path(folder)/'download.txt';path.write_text('fixture');view=QWidget(self.b);view.send=Mock();item=NativeDownload(view,'double-click',str(path));panel=self.b.download_panel;panel.add(item,str(path));row=panel.items[0]
+            with patch('downloads.QDesktopServices.openUrl',return_value=True) as opened:
+                QTest.mouseDClick(row.title,Qt.MouseButton.LeftButton,pos=QPoint(5,5));opened.assert_not_called()
+                item.update({'state':'DownloadCompleted'});QTest.mouseDClick(row.title,Qt.MouseButton.LeftButton,pos=QPoint(5,5));opened.assert_called_once();self.assertEqual(Path(opened.call_args.args[0].toLocalFile()).resolve(),path.resolve())
+    def test_site_panel_and_menus_have_rounded_backgrounds(self):
+        from menus import NovaMenu
+        panel=self.b.build_site_panel();panel.setAttribute(Qt.WidgetAttribute.WA_DontShowOnScreen,True);panel.show();self.app.processEvents();self.assertEqual(panel.grab().toImage().pixelColor(0,0).alpha(),0);panel.close();panel.deleteLater()
+        menu=NovaMenu(self.b);menu.entry('Paramètres','settings');menu.setAttribute(Qt.WidgetAttribute.WA_DontShowOnScreen,True);menu.show();self.app.processEvents();self.assertFalse(menu.mask().isEmpty());self.assertFalse(menu.mask().contains(menu.rect().topLeft()));menu.close();menu.deleteLater()
