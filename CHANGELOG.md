@@ -1,3 +1,8 @@
+## 4.4.1 — Écran d’import natif
+
+- Présentation adaptable à la fenêtre, avec des contrôles natifs, une mascotte animée et des boutons au dégradé violet-orange animé au survol et au focus clavier.
+- Import indépendant par catégorie. Nova détecte les exports CSV récents dont le nom correspond au navigateur choisi et poursuit l’import des autres données lorsque le CSV manque ou qu’une catégorie est illisible.
+
 ## 4.4.0 — Première ouverture et import
 
 - Écran d’import reprenant la maquette Nova originale, avec des contrôles interactifs et une mascotte dont les yeux s’animent.
