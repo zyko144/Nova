@@ -1,8 +1,8 @@
 """Nova first-run identity and explicit local data import."""
 import os,threading,sqlite3
 from pathlib import Path
-from PySide6.QtCore import Qt,QTimer,QUrl,Signal,QObject,QSize,QRectF,QVariantAnimation
-from PySide6.QtGui import QColor,QPainter,QLinearGradient
+from PySide6.QtCore import Qt,QTimer,QUrl,Signal,QObject,QSize,QRectF,QVariantAnimation,QPropertyAnimation,QEasingCurve
+from PySide6.QtGui import QColor,QPainter,QLinearGradient,QShortcut,QKeySequence
 from PySide6.QtWidgets import QWidget,QVBoxLayout,QHBoxLayout,QLabel,QPushButton,QComboBox,QCheckBox,QFileDialog,QGraphicsOpacityEffect,QProgressBar,QScrollArea,QFileIconProvider,QSizePolicy
 from PySide6.QtCore import QFileInfo,QStandardPaths
 from ui import NovaDialog
@@ -239,6 +239,7 @@ class Welcome(QWidget):
     def __init__(self,browser):
         super().__init__(browser)
         self.setObjectName('novaWelcome')
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground,True)
         self.browser=browser
         self.step=0
         self.confirm_skip=False
@@ -263,19 +264,38 @@ class Welcome(QWidget):
         self.login_button.clicked.connect(self.sign_in)
         header.addWidget(self.restore_button)
         header.addWidget(self.login_button)
+        self.quit_button=GradientButton('Quitter la présentation',warm=True)
+        self.quit_button.clicked.connect(self.finish)
+        header.addWidget(self.quit_button)
+        escape=QShortcut(QKeySequence('Escape'),self)
+        escape.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
+        escape.activated.connect(self.finish)
         root.addLayout(header)
 
         scroll=QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        scroll.setStyleSheet('QScrollArea{border:0;background:transparent}QScrollArea>QWidget>QWidget{background:#101014}')
+        scroll.setFrameShape(QScrollArea.Shape.NoFrame)
+        scroll.viewport().setObjectName('novaWelcomeViewport')
+        scroll.setStyleSheet('QScrollArea,QWidget#novaWelcomeViewport,QWidget#novaWelcomeContent{background:#101014;border:0}')
         content=QWidget()
+        content.setObjectName('novaWelcomeContent')
+        content.setAttribute(Qt.WidgetAttribute.WA_StyledBackground,True)
         self.columns=QHBoxLayout(content)
         self.columns.setContentsMargins(0,0,0,0)
         self.columns.setSpacing(30)
         self.columns.addStretch(1)
         copy=QWidget()
         copy.setMaximumWidth(650)
+        self.step_opacity=QGraphicsOpacityEffect(copy)
+        self.step_opacity.setOpacity(1)
+        copy.setGraphicsEffect(self.step_opacity)
+        self.step_transition=QPropertyAnimation(self.step_opacity,b'opacity',self)
+        self.step_transition.setDuration(180)
+        self.step_transition.setEasingCurve(QEasingCurve.Type.OutCubic)
+        self.step_transition.setStartValue(.56)
+        self.step_transition.setEndValue(1)
+        self.rendered_step=None
         left=QVBoxLayout(copy)
         left.setContentsMargins(0,8,0,8)
         left.setSpacing(19)
@@ -341,6 +361,13 @@ class Welcome(QWidget):
         self.title.setStyleSheet(f'color:#f5f1fa;font-weight:600;font-size:{size}px')
 
     def render(self):
+        if self.rendered_step!=self.step:
+            self.step_transition.stop()
+            if enabled(self.browser):
+                self.step_transition.start()
+            else:
+                self.step_opacity.setOpacity(1)
+            self.rendered_step=self.step
         rows=[('Bienvenue dans <span style="color:#b596ff">Nova.</span>','Vos sites, vos habitudes. Un navigateur sombre et simple, avec les outils utiles à portée de main.','Commencer'),('Vos données, <span style="color:#b596ff">votre Nova.</span>','Retrouvez vos favoris, votre historique et vos identifiants.','Importer'),('Votre compte.<br><span style="color:#b596ff">Votre identité.</span>','Connectez Google pour retrouver votre nom et votre photo dans Nova. Les identifiants des sites s’importent séparément.','Continuer avec Google'),('Prêt pour<br><span style="color:#b596ff">la suite.</span>','Onglets en pause, téléchargements suivis et réglages compacts. Tout reste accessible depuis le menu Nova.','Personnaliser Nova')]
         title,description,action=rows[self.step];self.setAccessibleName(('Bienvenue dans Nova','Vos données, votre Nova','Votre compte Google','Nova est prêt')[self.step]);self.setAccessibleDescription(description);self.title.setText(title);self.description.setText(description);self.action.setText(action);self.action.setVisible(self.step!=1);self.import_panel.setVisible(self.step==1);self.progress.setText(f'Étape {self.step+1} sur 4');self.progress_bar.setValue(self.step+1);self.next.setText('Entrer dans Nova' if self.step==3 else 'Continuer');self.next.setVisible(self.step in (2,3) or self.step==1 and self.import_panel.imported);self.skip.setVisible(self.step<3 and not (self.step==1 and self.import_panel.imported));self.skip.setText('Continuer sans importer →' if self.step==1 and self.confirm_skip else 'Ignorer cette étape →');self.note.setText(('Import possible plus tard. Cliquez encore pour continuer sans importer.' if self.width()<1100 else 'Vous pourrez importer plus tard dans les paramètres. Cliquez encore pour continuer sans importer.') if self.step==1 and self.confirm_skip and not self.import_panel.imported else '');self.note.setVisible(bool(self.note.text()));self.update_title_size()
     def perform(self):
@@ -363,8 +390,11 @@ class Welcome(QWidget):
         if self.step==1 and not self.confirm_skip and not self.import_panel.imported:self.confirm_skip=True;self.render();return
         self.advance()
     def finish(self):
-        self.import_panel.cancelled.set()
         browser=self.browser
+        if browser.welcome is not self:
+            return
+        self.import_panel.cancelled.set()
+        self.step_transition.stop()
         browser.data['welcome_completed']=True
         browser.data['welcome_identity_seen']=True
         browser.save()
