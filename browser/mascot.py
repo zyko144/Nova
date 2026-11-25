@@ -1,8 +1,8 @@
 """Nova's generated glass mascot: occasional sprite changes, no idle render loop."""
 import random
 from pathlib import Path
-from PySide6.QtCore import Qt,QTimer,QSize,Signal
-from PySide6.QtGui import QImageReader,QPixmap,QPainter
+from PySide6.QtCore import Qt,QTimer,QSize,Signal,QRectF
+from PySide6.QtGui import QImageReader,QPixmap,QPainter,QPainterPath
 from PySide6.QtWidgets import QWidget,QApplication
 from motion import enabled
 
@@ -33,6 +33,22 @@ class Mascot(QWidget):
         super().enterEvent(event)
         if enabled(self.browser):self.state=2;self.update();self.stateChanged.emit();self.return_timer.start(900)
     def paintEvent(self,event):
-        picture=self.frames[self.state]
-        if picture.isNull():return
-        painter=QPainter(self);painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform);size=picture.size().scaled(self.size(),Qt.AspectRatioMode.KeepAspectRatio);rect=self.rect();x=(rect.width()-size.width())//2;y=(rect.height()-size.height())//2;painter.drawPixmap(x,y,size.width(),size.height(),picture)
+        neutral=self.frames[0]
+        if neutral.isNull():
+            return
+        painter=QPainter(self)
+        painter.setRenderHints(QPainter.RenderHint.Antialiasing|QPainter.RenderHint.SmoothPixmapTransform)
+        size=neutral.size().scaled(self.size(),Qt.AspectRatioMode.KeepAspectRatio)
+        x=(self.width()-size.width())/2
+        y=(self.height()-size.height())/2
+        painter.translate(x,y)
+        painter.scale(size.width()/1536,size.height()/1024)
+        target=QRectF(0,0,1536,1024)
+        painter.drawPixmap(target,neutral,QRectF(neutral.rect()))
+        frame=self.frames[self.state]
+        if self.state and not frame.isNull():
+            eyes=QPainterPath()
+            eyes.addRoundedRect(QRectF(872,509,110,124),19,19)
+            eyes.addRoundedRect(QRectF(1050,477,104,111),17,17)
+            painter.setClipPath(eyes)
+            painter.drawPixmap(target,frame,QRectF(frame.rect()))

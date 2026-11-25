@@ -313,7 +313,16 @@ class Browser(Features,QMainWindow):
             try:
                 if existing.isVisible():existing.raise_();return
             except RuntimeError:pass
-        self.welcome=Welcome(self);self.welcome.setGeometry(0,self.titlebar.height(),self.width(),self.height()-self.titlebar.height());self.welcome.show();self.welcome.raise_()
+        self.exit_video_fullscreen()
+        self.welcome=Welcome(self)
+        self.welcome.previous_window_state=self.windowState()
+        self.welcome.previous_visibility=(not self.chrome.isHidden(),not self.tabs.isHidden())
+        self.chrome.hide()
+        self.tabs.hide()
+        self.showFullScreen()
+        self.welcome.setGeometry(self.rect())
+        self.welcome.show()
+        self.welcome.raise_()
     def restore_session(self):
         tabs=self.previous_session.get('tabs',[]);created=[]
         from import_data import safe_url
@@ -550,7 +559,7 @@ class Browser(Features,QMainWindow):
             except RuntimeError:pass
         if hasattr(self,'resize_grip'): self.resize_grip.move(self.width()-18,self.height()-18)
         if getattr(self,'welcome',None):
-            try:self.welcome.setGeometry(0,self.titlebar.height(),self.width(),self.height()-self.titlebar.height())
+            try:self.welcome.setGeometry(self.rect())
             except RuntimeError:self.welcome=None
     def fullscreen(self,on,view=None):
         if on:

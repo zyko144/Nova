@@ -18,7 +18,7 @@ class GradientButton(QPushButton):
         super().__init__(text)
         self.warm=warm
         self.phase=0.0
-        self.setMinimumHeight(37)
+        self.setMinimumHeight(42)
         self.setStyleSheet('QPushButton{padding:7px 17px;font-size:13px;font-weight:600;border:0}')
         self.motion=QVariantAnimation(self)
         self.motion.setDuration(1700)
@@ -278,7 +278,7 @@ class Welcome(QWidget):
         copy.setMaximumWidth(650)
         left=QVBoxLayout(copy)
         left.setContentsMargins(0,8,0,8)
-        left.setSpacing(12)
+        left.setSpacing(19)
         left.addStretch()
         self.title=QLabel()
         self.title.setWordWrap(True)
@@ -290,8 +290,9 @@ class Welcome(QWidget):
         left.addWidget(self.description)
         self.import_panel=ImportPanel(browser,copy)
         self.import_panel.completed.connect(self.import_done)
-        self.import_panel.body.setSpacing(6)
+        self.import_panel.body.setSpacing(10)
         self.import_panel.setStyleSheet('')
+        self.import_panel.import_button.setMinimumWidth(136)
         left.addWidget(self.import_panel)
         self.action=GradientButton()
         self.action.clicked.connect(self.perform)
@@ -361,5 +362,18 @@ class Welcome(QWidget):
     def skip_step(self):
         if self.step==1 and not self.confirm_skip and not self.import_panel.imported:self.confirm_skip=True;self.render();return
         self.advance()
-    def finish(self):self.import_panel.cancelled.set();self.browser.data['welcome_completed']=True;self.browser.data['welcome_identity_seen']=True;self.browser.save();self.hide();self.browser.welcome=None;QTimer.singleShot(500,self.browser.offer_default_browser);self.deleteLater()
+    def finish(self):
+        self.import_panel.cancelled.set()
+        browser=self.browser
+        browser.data['welcome_completed']=True
+        browser.data['welcome_identity_seen']=True
+        browser.save()
+        self.hide()
+        browser.welcome=None
+        chrome_visible,tabs_visible=self.previous_visibility
+        browser.chrome.setVisible(chrome_visible)
+        browser.tabs.setVisible(tabs_visible)
+        browser.setWindowState(self.previous_window_state)
+        QTimer.singleShot(500,browser.offer_default_browser)
+        self.deleteLater()
     def reject(self):self.skip_step() if self.step<3 else self.finish()
