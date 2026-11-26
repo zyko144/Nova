@@ -198,13 +198,32 @@ sealed class MediaWindow : Form
                             extension=(await web.CoreWebView2.Profile.GetBrowserExtensionsAsync()).FirstOrDefault(item=>item.Id==id);
                         }
                     } catch { }
+                    bool reusedExtension=extension!=null;
                     extension ??= await web.CoreWebView2.Profile.AddBrowserExtensionAsync(extensionPath);
                     if(previousId.Length>0 && previousId!=extension.Id){var previous=(await web.CoreWebView2.Profile.GetBrowserExtensionsAsync()).FirstOrDefault(item=>item.Id==previousId);if(previous!=null)await previous.RemoveAsync();}
-                    File.WriteAllText(markerPath,JsonSerializer.Serialize(new {stamp,id=extension.Id}));
+                    if(!reusedExtension)File.WriteAllText(markerPath,JsonSerializer.Serialize(new {stamp,id=extension.Id}));
                     blocker=extension;
-                    await extension.EnableAsync(!noAdblock);
+                    bool enabledNow=!noAdblock;
+                    bool wasEnabled=extension.IsEnabled;
+                    if(wasEnabled!=enabledNow)await extension.EnableAsync(enabledNow);
                     blockerId = extension.Id;
-                    if(!noAdblock)await ConfigureBlocker();
+                    if(enabledNow && !privateMode){
+                        string validatedPath=Path.Combine(profile,"nova-blocker-ready.txt");
+                        string validation=stamp+"|"+blockerId+"|"+environment.BrowserVersionString;
+                        bool cached=false;
+                        if(reusedExtension && wasEnabled && !selfTest){
+                            try{cached=File.ReadAllText(validatedPath)==validation;}catch(IOException){}catch(UnauthorizedAccessException){}
+                        }
+                        if(cached){
+                            blockerScriptsReady=true;
+                            Send(new {type="adblock-health",ok=true,cached=true});
+                        }else{
+                            await ConfigureBlocker();
+                            if(blockerScriptsReady){
+                                try{File.WriteAllText(validatedPath,validation);}catch(IOException){}catch(UnauthorizedAccessException){}
+                            }
+                        }
+                    }
                     Send(new { type="adblock", enabled=extension.IsEnabled, name=extension.Name, id=extension.Id });
                 }
                 else Send(new { type="adblock", enabled=false, name="Extension manquante" });

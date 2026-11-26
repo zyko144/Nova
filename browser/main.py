@@ -273,8 +273,9 @@ class Browser(Features,QMainWindow):
             if getattr(self,'_video_fullscreen_active',False):self.exit_video_fullscreen(previous)
             if previous is not None and not getattr(previous,'_closing',False):
                 if isinstance(previous,MediaView):previous.send('thumbnail')
-                try:previous._preview=previous.grab().scaled(280,160,Qt.AspectRatioMode.KeepAspectRatio,Qt.TransformationMode.SmoothTransformation)
-                except RuntimeError:pass
+                elif previous.url().scheme() not in ('about','nova'):
+                    try:previous._preview=previous.grab().scaled(280,160,Qt.AspectRatioMode.KeepAspectRatio,Qt.TransformationMode.SmoothTransformation)
+                    except RuntimeError:pass
                 if time.monotonic()-getattr(previous,'_visited_at',time.monotonic())>300:self.revoke_site(previous)
             if current is not None:current._visited_at=time.monotonic()
             self._active_view=current
@@ -989,12 +990,17 @@ if __name__=='__main__':
     elif window.data['preferences'].get('start_fullscreen',True):window.showFullScreen()
     else:window.show()
     if getattr(sys,'frozen',False) and '--smoke-test' not in sys.argv:
-        from startup import set_startup,integrate
-        from default_browser import register_browser
-        try:
-            register_browser(False);set_startup(window.data['preferences'].get('start_with_windows',True));integrate()
-            window.data['startup_configured']=True;window.save()
-        except (OSError,ValueError):pass
+        def integrate_after_start():
+            from startup import set_startup,integrate
+            from default_browser import register_browser
+            try:
+                register_browser(False)
+                set_startup(window.data['preferences'].get('start_with_windows',True))
+                integrate()
+                window.data['startup_configured']=True
+                window.schedule_save()
+            except (OSError,ValueError):pass
+        QTimer.singleShot(1200,window,integrate_after_start)
     if external_url:QTimer.singleShot(0,lambda:window.new_tab(QUrl(external_url)))
     if '--smoke-test' in sys.argv:
         def check():
